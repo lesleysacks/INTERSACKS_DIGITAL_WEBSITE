@@ -1400,3 +1400,58 @@ gap:19px}
 .form-row{
 margin-bottom:19px}
 }
+.founder-photo {
+  margin: 0;
+}
+
+.founder-photo > img {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 25%;
+}
+
+.founder-photo::before {
+  z-index: 1;
+}
+
+.founder-photo::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(
+    to top,
+    rgba(8, 20, 35, 0.92),
+    rgba(8, 20, 35, 0.08) 62%
+  );
+  pointer-events: none;
+}
+
+.founder-caption {
+  position: absolute;
+  right: 28px;
+  bottom: 25px;
+  left: 28px;
+  z-index: 2;
+  color: var(--cream);
+}
+
+.founder-caption strong {
+  display: block;
+  margin-bottom: 5px;
+  font-family: var(--serif);
+  font-size: 25px;
+  font-weight: 500;
+}
+
+.founder-caption span {
+  color: #d8dde1;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+}
