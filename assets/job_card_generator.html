@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Create, preview and download professional browser-based service job cards.">
+  <meta name="theme-color" content="#081423">
+  <title>Job Card Generator | InterSacks Digital</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --navy: #081423;
+      --navy-2: #0e1e31;
+      --gold: #c8a15a;
+      --gold-dark: #755216;
+      --gold-lite: #e5c98f;
+      --cream: #f8f8f6;
+      --ink: #14202d;
+      --muted: #68717a;
+      --line: rgba(200, 161, 90, 0.35);
+      --danger: #9c3d3d;
+      --success: #317457;
+      --focus: #947435;
+      --font: "Segoe UI", Arial, sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-width: 0;
+      margin: 0;
+      background: var(--navy);
+      color: var(--cream);
+      font: 15px/1.6 var(--font);
+    }
+    button, input, select, textarea { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    a { color: inherit; text-decoration: none; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    [hidden] { display: none !important; }
+
+    .skip-link {
+      position: fixed;
+      top: -70px;
+      left: 16px;
+      z-index: 20;
+      min-height: 44px;
+      padding: 10px 14px;
+      background: var(--gold);
+      color: var(--navy);
+      font-weight: 700;
+    }
+    .skip-link:focus { top: 16px; }
+    .tool-shell {
+      width: min(1320px, calc(100% - 56px));
+      margin: 0 auto;
+      padding: 26px 0 42px;
+    }
+    .tool-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      gap: 10px;
+      line-height: 1;
+    }
+    .brand-mark {
+      color: var(--gold);
+      font: 600 31px/1 var(--serif);
+      letter-spacing: -3px;
+    }
+    .brand-name { font-size: 12px; font-weight: 800; letter-spacing: 2.5px; }
+    .brand-name small {
+      display: block;
+      margin-top: 5px;
+      font-size: 7px;
+      letter-spacing: 4px;
+    }
+    .back-link {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      border-bottom: 1px solid var(--gold);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+    .tool-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 430px);
+      gap: 50px;
+      align-items: end;
+      padding: 46px 0 34px;
+    }
+    .eyebrow {
+      margin: 0 0 13px;
+      color: var(--gold-lite);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 2.4px;
+      text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: "";
+      display: inline-block;
+      width: 28px;
+      height: 1px;
+      margin: -2px 11px 0 0;
+      background: var(--gold);
+      vertical-align: middle;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      margin-bottom: 0;
+      font-size: clamp(38px, 5vw, 68px);
+      font-weight: 500;
+      line-height: 1.08;
+    }
+    h1 em { color: var(--gold); font-family: var(--serif); font-weight: 500; }
+    .tool-intro { margin: 0; color: #b7c0c7; font-size: 14px; }
+    .tool-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+      gap: 24px;
+      align-items: start;
+    }
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: var(--cream);
+      color: var(--ink);
+    }
+    .form-panel { padding: 28px; }
+    fieldset {
+      min-width: 0;
+      margin: 0 0 26px;
+      padding: 0;
+      border: 0;
+      border-top: 1px solid #d0d0cb;
+    }
+    legend {
+      padding: 15px 13px 0 0;
+      color: var(--gold-dark);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 17px;
+    }
+    .form-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .field { min-width: 0; }
+    .field-wide { grid-column: 1 / -1; }
+    .field label, .material-labels span, .choice-label {
+      display: block;
+      margin-bottom: 6px;
+      color: #59636d;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    input:not([type="checkbox"]), select, textarea {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #c8c9c4;
+      border-radius: 0;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 11px;
+      outline: 0;
+    }
+    input:not([type="checkbox"]), select { min-height: 44px; }
+    textarea { min-height: 92px; resize: vertical; }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px rgba(200, 161, 90, 0.24);
+    }
+    input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+    input[readonly], input:disabled, textarea:disabled {
+      background: #ecece7;
+      color: #535d67;
+    }
+    .help-text, .privacy-notice, .acknowledgement-notice {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .privacy-notice {
+      margin: 0 0 24px;
+      border-left: 3px solid var(--gold);
+      padding: 10px 13px;
+      background: #efefe9;
+    }
+    .duration-output {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      padding: 10px 11px;
+      border: 1px solid #c8c9c4;
+      background: #ecece7;
+      color: var(--ink);
+      font-weight: 700;
+    }
+    .material-labels, .material-row {
+      display: grid;
+      grid-template-columns: minmax(150px, 1.7fr) minmax(70px, .55fr) minmax(105px, .9fr) minmax(130px, 1.2fr) auto;
+      gap: 8px;
+    }
+    .material-labels {
+      align-items: end;
+      margin-top: 17px;
+      padding: 0 9px;
+    }
+    .material-labels span:nth-child(2) { text-align: right; }
+    .material-row {
+      align-items: center;
+      margin-bottom: 9px;
+      padding: 9px;
+      background: #efefe9;
+    }
+    .material-row input[type="number"] { text-align: right; }
+    .button, .remove-button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .9px;
+      text-transform: uppercase;
+      transition: transform .2s, background .2s, color .2s;
+    }
+    .button { padding: 12px 16px; }
+    .button:hover, .remove-button:hover { transform: translateY(-2px); }
+    .button-primary { background: var(--gold); color: var(--navy); }
+    .button-secondary { border: 1px solid var(--navy); background: transparent; color: var(--navy); }
+    .button-reset { border: 1px solid #a8aaa5; background: transparent; color: #59636d; }
+    .remove-button { padding: 8px 10px; background: transparent; color: var(--danger); }
+    .materials-footer, .form-actions, .check-field {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .materials-footer, .form-actions { flex-wrap: wrap; justify-content: flex-start; }
+    .checklist-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 20px;
+      margin-top: 17px;
+    }
+    .check-field { min-height: 44px; padding: 4px 0; }
+    .check-field input {
+      width: 20px;
+      height: 20px;
+      flex: 0 0 auto;
+      accent-color: var(--gold-dark);
+    }
+    .check-field label {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      margin: 0;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .form-actions { padding-top: 4px; }
+    .form-message {
+      min-height: 23px;
+      margin: 13px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .form-message.is-error {
+      border-left: 3px solid var(--danger);
+      padding-left: 9px;
+      color: var(--danger);
+    }
+    .form-message.is-success { color: var(--success); }
+    .preview-panel {
+      position: sticky;
+      top: 24px;
+      padding: 28px;
+      background: #fff;
+    }
+    .preview-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 24px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #d0d0cb;
+    }
+    .preview-heading h2 { margin: 0; font-size: 26px; font-weight: 600; }
+    .preview-heading span {
+      color: var(--gold-dark);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .preview-empty {
+      display: grid;
+      min-height: 330px;
+      place-items: center;
+      padding: 25px;
+      border: 1px dashed #c8c9c4;
+      color: var(--muted);
+      text-align: center;
+    }
+    .job-preview-header, .job-parties {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+    }
+    .job-preview-header { align-items: start; margin-bottom: 22px; }
+    .job-preview-title { margin: 0; color: var(--navy); font: 600 34px/1 var(--serif); }
+    .job-meta { text-align: right; }
+    .job-meta p, .party p {
+      margin: 0 0 3px;
+      overflow-wrap: anywhere;
+      font-size: 12px;
+    }
+    .job-meta strong, .party h3, .preview-block h3, .preview-equipment h3 {
+      color: var(--gold-dark);
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .status-chip {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 4px 7px;
+      border: 1px solid var(--gold-dark);
+      color: var(--gold-dark);
+      font-size: 8px;
+      font-weight: 800;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .party { min-width: 0; padding: 14px; background: #f0f0ec; }
+    .party h3 { margin: 0 0 8px; }
+    .preview-equipment, .preview-block {
+      margin-top: 17px;
+      padding-top: 13px;
+      border-top: 1px solid #d8d8d3;
+    }
+    .preview-equipment { padding: 13px; background: #f0f0ec; }
+    .preview-equipment h3, .preview-block h3 { margin: 0 0 6px; }
+    .preview-equipment p, .preview-block p {
+      margin: 0;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
+      color: #4f5b66;
+      font-size: 11px;
+    }
+    .service-meta-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 18px;
+      margin-top: 17px;
+      padding: 13px;
+      background: #f0f0ec;
+    }
+    .service-meta-grid p { margin: 0; font-size: 11px; }
+    .service-meta-grid strong { display: block; color: var(--gold-dark); font-size: 8px; text-transform: uppercase; }
+    .preview-table-wrap {
+      max-width: 100%;
+      margin-top: 17px;
+      overflow-x: auto;
+    }
+    .materials-table {
+      width: 100%;
+      min-width: 520px;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .materials-table th, .materials-table td {
+      padding: 9px 7px;
+      border-bottom: 1px solid #d8d8d3;
+      text-align: left;
+      vertical-align: top;
+    }
+    .materials-table th {
+      background: var(--navy);
+      color: var(--cream);
+      font-size: 8px;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    .materials-table th:nth-child(2), .materials-table td:nth-child(2) {
+      text-align: right;
+      white-space: nowrap;
+    }
+    .checklist-results {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px 14px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      font-size: 11px;
+    }
+    .checklist-results strong { color: var(--gold-dark); }
+    .acknowledgement-box {
+      margin-top: 17px;
+      padding: 13px;
+      border-left: 3px solid var(--gold);
+      background: #f0f0ec;
+    }
+    .acknowledgement-box p { margin: 0 0 4px; font-size: 11px; }
+    .acknowledgement-box small { display: block; margin-top: 8px; color: var(--muted); }
+    .tool-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 30px 0 0;
+      color: #88939d;
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 980px) {
+      .tool-layout, .tool-heading { grid-template-columns: 1fr; }
+      .tool-heading { gap: 18px; }
+      .preview-panel { position: static; }
+    }
+    @media (max-width: 680px) {
+      .tool-shell { width: min(100% - 32px, 1320px); padding-top: 18px; }
+      .tool-nav, .tool-footer { align-items: flex-start; }
+      .tool-heading { padding: 34px 0 27px; }
+      .form-panel, .preview-panel { padding: 20px; }
+      .form-grid, .form-grid-three, .job-preview-header, .job-parties, .service-meta-grid, .checklist-grid { grid-template-columns: 1fr; }
+      .field-wide { grid-column: auto; }
+      .job-meta { text-align: left; }
+      .material-labels { display: none; }
+      .material-row { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 17px; }
+      .material-description, .material-notes { grid-column: 1 / -1; }
+      .remove-button { grid-column: 2; }
+      .form-actions .button { flex: 1 1 180px; }
+    }
+    @media (max-width: 390px) {
+      .tool-shell { width: min(100% - 24px, 1320px); }
+      .tool-nav, .tool-footer, .materials-footer { flex-direction: column; }
+      .brand-name { font-size: 10px; }
+      .form-panel, .preview-panel { padding: 16px; }
+      .material-row { grid-template-columns: minmax(0, 1fr); }
+      .material-description, .material-notes, .remove-button { grid-column: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: .01ms !important;
+      }
+      .button:hover, .remove-button:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#job-card-form">Skip to job card form</a>
+  <main class="tool-shell">
+    <nav class="tool-nav" aria-label="Job card tool navigation">
+      <a class="brand" href="../work.html" aria-label="InterSacks Digital work page">
+        <span class="brand-mark" aria-hidden="true">iS</span>
+        <span class="brand-name">INTERSACKS <small>DIGITAL</small></span>
+      </a>
+      <a class="back-link" href="../work.html">Back to selected work ↑</a>
+    </nav>
+
+    <header class="tool-heading">
+      <div>
+        <p class="eyebrow">Working prototype</p>
+        <h1>Job Card <em>Generator.</em></h1>
+      </div>
+      <p class="tool-intro">Record a service request, equipment, technician activity, completed work, materials and customer acknowledgement in a professional proof-of-work document.</p>
+    </header>
+
+    <noscript><p class="privacy-notice">JavaScript is required to validate, preview and download job cards. Your information is not submitted by this page.</p></noscript>
+
+    <div class="tool-layout">
+      <section class="panel form-panel" aria-label="Job card details">
+        <p class="privacy-notice">Your job card information stays in this browser session and is not uploaded by InterSacks Digital.</p>
+        <form id="job-card-form">
+          <fieldset>
+            <legend>Business details</legend>
+            <div class="form-grid">
+              <div class="field"><label for="business-name">Business name</label><input id="business-name" name="businessName" type="text" maxlength="120" autocomplete="organization" required></div>
+              <div class="field"><label for="technician-name">Technician or assigned staff member</label><input id="technician-name" name="technicianName" type="text" maxlength="120" required></div>
+              <div class="field"><label for="business-phone">Telephone</label><input id="business-phone" name="businessPhone" type="tel" maxlength="40" autocomplete="tel"></div>
+              <div class="field"><label for="business-email">Email</label><input id="business-email" name="businessEmail" type="email" maxlength="120" autocomplete="email"></div>
+              <div class="field field-wide"><label for="business-address">Address</label><textarea id="business-address" name="businessAddress" maxlength="240" autocomplete="street-address"></textarea></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Customer details</legend>
+            <div class="form-grid">
+              <div class="field"><label for="customer-name">Customer or company name</label><input id="customer-name" name="customerName" type="text" maxlength="120" autocomplete="organization" required></div>
+              <div class="field"><label for="contact-person">Contact person</label><input id="contact-person" name="contactPerson" type="text" maxlength="120" autocomplete="name"></div>
+              <div class="field"><label for="customer-phone">Telephone</label><input id="customer-phone" name="customerPhone" type="tel" maxlength="40" autocomplete="tel"></div>
+              <div class="field"><label for="customer-email">Email</label><input id="customer-email" name="customerEmail" type="email" maxlength="120" autocomplete="email"></div>
+              <div class="field field-wide"><label for="service-address">Service address</label><textarea id="service-address" name="serviceAddress" maxlength="240" autocomplete="street-address"></textarea></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Job details</legend>
+            <div class="form-grid form-grid-three">
+              <div class="field"><label for="job-card-number">Job-card number</label><input id="job-card-number" name="jobCardNumber" type="text" maxlength="60" required></div>
+              <div class="field"><label for="job-status">Status</label><select id="job-status" name="jobStatus"><option>Open</option><option>Scheduled</option><option>In Progress</option><option>Awaiting Parts</option><option>Completed</option><option>Cancelled</option></select></div>
+              <div class="field"><label for="job-priority">Priority</label><select id="job-priority" name="jobPriority"><option>Normal</option><option>Urgent</option><option>Emergency</option></select></div>
+              <div class="field"><label for="date-opened">Date opened</label><input id="date-opened" name="dateOpened" type="date" required></div>
+              <div class="field"><label for="scheduled-date">Scheduled date</label><input id="scheduled-date" name="scheduledDate" type="date"></div>
+              <div class="field"><label for="completion-date">Completion date</label><input id="completion-date" name="completionDate" type="date"></div>
+              <div class="field"><label for="arrival-time">Arrival time</label><input id="arrival-time" name="arrivalTime" type="time"></div>
+              <div class="field"><label for="departure-time">Departure time</label><input id="departure-time" name="departureTime" type="time"></div>
+              <div class="field"><span class="choice-label">Service duration</span><output class="duration-output" id="service-duration" aria-live="polite">Not calculated</output></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Equipment or asset details</legend>
+            <div class="form-grid">
+              <div class="field"><label for="equipment-type">Equipment or asset type</label><input id="equipment-type" name="equipmentType" type="text" maxlength="120"></div>
+              <div class="field"><label for="equipment-location">Equipment location</label><input id="equipment-location" name="equipmentLocation" type="text" maxlength="160"></div>
+              <div class="field"><label for="equipment-make">Make</label><input id="equipment-make" name="equipmentMake" type="text" maxlength="100"></div>
+              <div class="field"><label for="equipment-model">Model</label><input id="equipment-model" name="equipmentModel" type="text" maxlength="100"></div>
+              <div class="field field-wide"><label for="serial-number">Serial or registration number</label><input id="serial-number" name="serialNumber" type="text" maxlength="120"></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Service information</legend>
+            <div class="form-grid">
+              <div class="field field-wide"><label for="reported-problem">Customer-reported problem or request</label><textarea id="reported-problem" name="reportedProblem" maxlength="1600" required></textarea></div>
+              <div class="field field-wide"><label for="inspection-findings">Inspection findings</label><textarea id="inspection-findings" name="inspectionFindings" maxlength="1800"></textarea></div>
+              <div class="field field-wide"><label for="work-performed">Work performed <span id="work-required-note">(required when completed)</span></label><textarea id="work-performed" name="workPerformed" maxlength="2200"></textarea></div>
+              <div class="field field-wide"><label for="recommendations">Recommendations or follow-up work</label><textarea id="recommendations" name="recommendations" maxlength="1600"></textarea></div>
+              <div class="field field-wide"><label for="internal-notes">Internal notes</label><textarea id="internal-notes" name="internalNotes" maxlength="1600"></textarea></div>
+              <div class="field field-wide"><div class="check-field"><input id="include-internal-notes" name="includeInternalNotes" type="checkbox"><label for="include-internal-notes">Include internal notes in PDF and customer-facing preview</label></div></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Materials and parts</legend>
+            <p class="help-text">Leave the single blank row empty if no materials or parts were used.</p>
+            <div class="material-labels" aria-hidden="true"><span>Description</span><span>Qty</span><span>Part / reference</span><span>Notes</span><span></span></div>
+            <div id="materials-container"></div>
+            <div class="materials-footer"><button class="button button-secondary" id="add-material-button" type="button">+ Add material</button></div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Completion checklist</legend>
+            <div class="checklist-grid">
+              <div class="check-field"><input id="area-clean" name="areaClean" type="checkbox"><label for="area-clean">Work area left clean</label></div>
+              <div class="check-field"><input id="equipment-tested" name="equipmentTested" type="checkbox"><label for="equipment-tested">Equipment tested</label></div>
+              <div class="check-field"><input id="customer-informed" name="customerInformed" type="checkbox"><label for="customer-informed">Customer informed</label></div>
+              <div class="check-field"><input id="follow-up-required" name="followUpRequired" type="checkbox"><label for="follow-up-required">Follow-up required</label></div>
+            </div>
+            <div class="form-grid">
+              <div class="field field-wide" id="follow-up-field" hidden><label for="follow-up-details">Follow-up explanation</label><textarea id="follow-up-details" name="followUpDetails" maxlength="1200" disabled></textarea></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Customer acknowledgement</legend>
+            <div class="form-grid">
+              <div class="field"><label for="acknowledgement-name">Customer representative’s typed name</label><input id="acknowledgement-name" name="acknowledgementName" type="text" maxlength="120"></div>
+              <div class="field"><label for="acknowledgement-date">Acknowledgement date</label><input id="acknowledgement-date" name="acknowledgementDate" type="date"></div>
+              <div class="field field-wide"><div class="check-field"><input id="work-explained" name="workExplained" type="checkbox"><label for="work-explained">The work and findings were explained to the customer representative</label></div></div>
+            </div>
+            <p class="acknowledgement-notice">A typed acknowledgement records that the service information was explained. It is not presented as a legally verified digital signature.</p>
+          </fieldset>
+
+          <div class="form-actions">
+            <button class="button button-secondary" id="preview-button" type="button">Preview job card</button>
+            <button class="button button-primary" id="download-button" type="button">Download PDF</button>
+            <button class="button button-reset" id="reset-button" type="button">Reset form</button>
+          </div>
+          <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <aside class="panel preview-panel" aria-labelledby="preview-title">
+        <div class="preview-heading"><h2 id="preview-title" tabindex="-1">Job card preview</h2><span>Service record</span></div>
+        <div class="preview-empty" id="preview-empty"><p>Complete the required fields, then select “Preview job card” to review the service record safely.</p></div>
+        <div id="preview-document" hidden></div>
+      </aside>
+    </div>
+
+    <footer class="tool-footer"><span>InterSacks Digital</span><span>Browser-based service-record prototype</span></footer>
+  </main>
+
+  <template id="material-row-template">
+    <div class="material-row">
+      <label class="sr-only">Material description</label><input class="material-description" type="text" maxlength="240" placeholder="Description" aria-label="Material description">
+      <label class="sr-only">Material quantity</label><input class="material-quantity" type="number" min="0.01" max="1000000" step="0.01" inputmode="decimal" placeholder="Qty" aria-label="Material quantity">
+      <label class="sr-only">Part or reference number</label><input class="material-reference" type="text" maxlength="120" placeholder="Part / reference" aria-label="Part or reference number">
+      <label class="sr-only">Material notes</label><input class="material-notes" type="text" maxlength="240" placeholder="Notes" aria-label="Material notes">
+      <button class="remove-button" type="button" aria-label="Remove material row">Remove</button>
+    </div>
+  </template>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script>
+    (() => {
+      'use strict';
+
+      const form = document.querySelector('#job-card-form');
+      const materialsContainer = document.querySelector('#materials-container');
+      const materialTemplate = document.querySelector('#material-row-template');
+      const addMaterialButton = document.querySelector('#add-material-button');
+      const previewButton = document.querySelector('#preview-button');
+      const downloadButton = document.querySelector('#download-button');
+      const resetButton = document.querySelector('#reset-button');
+      const jobStatus = document.querySelector('#job-status');
+      const workPerformed = document.querySelector('#work-performed');
+      const acknowledgementName = document.querySelector('#acknowledgement-name');
+      const acknowledgementDate = document.querySelector('#acknowledgement-date');
+      const workExplained = document.querySelector('#work-explained');
+      const followUpRequired = document.querySelector('#follow-up-required');
+      const followUpField = document.querySelector('#follow-up-field');
+      const followUpDetails = document.querySelector('#follow-up-details');
+      const includeInternalNotes = document.querySelector('#include-internal-notes');
+      const serviceDuration = document.querySelector('#service-duration');
+      const previewTitle = document.querySelector('#preview-title');
+      const previewEmpty = document.querySelector('#preview-empty');
+      const previewDocument = document.querySelector('#preview-document');
+      const formMessage = document.querySelector('#form-message');
+
+      const value = (selector) => document.querySelector(selector).value.trim();
+      const parseFiniteNumber = (input) => {
+        const normalized = String(input).trim();
+        if (!normalized) return null;
+        const number = Number(normalized);
+        return Number.isFinite(number) ? number : null;
+      };
+      const parseMaterialQuantity = (input) => {
+        const quantity = parseFiniteNumber(input);
+        return quantity !== null && quantity > 0 && quantity <= 1000000 ? quantity : null;
+      };
+      const parseTimeMinutes = (input) => {
+        if (!/^\d{2}:\d{2}$/.test(input)) return null;
+        const [hours, minutes] = input.split(':').map(Number);
+        return Number.isInteger(hours) && hours >= 0 && hours <= 23 && Number.isInteger(minutes) && minutes >= 0 && minutes <= 59
+          ? (hours * 60) + minutes
+          : null;
+      };
+      const formatDuration = (minutes) => {
+        if (!Number.isInteger(minutes) || minutes < 0) return 'Not calculated';
+        const hours = Math.floor(minutes / 60);
+        const remainingMinutes = minutes % 60;
+        const parts = [];
+        if (hours) parts.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+        if (remainingMinutes || !hours) parts.push(`${remainingMinutes} minute${remainingMinutes === 1 ? '' : 's'}`);
+        return parts.join(' ');
+      };
+      const calculateDuration = () => {
+        const arrival = parseTimeMinutes(value('#arrival-time'));
+        const departure = parseTimeMinutes(value('#departure-time'));
+        const duration = arrival !== null && departure !== null && departure >= arrival ? formatDuration(departure - arrival) : 'Not calculated';
+        serviceDuration.textContent = duration;
+        return duration;
+      };
+      const setMessage = (message = '', type = '') => {
+        formMessage.textContent = message;
+        formMessage.className = `form-message${type ? ` is-${type}` : ''}`;
+      };
+      const getMaterialRows = () => [...materialsContainer.querySelectorAll('.material-row')];
+      const materialRowHasData = (row) => [...row.querySelectorAll('input')].some((input) => input.value.trim() !== '');
+      const updateRemoveButtons = () => {
+        const rows = getMaterialRows();
+        rows.forEach((row) => { row.querySelector('.remove-button').hidden = rows.length === 1; });
+      };
+      const addMaterial = (values = {}) => {
+        const row = materialTemplate.content.firstElementChild.cloneNode(true);
+        row.querySelector('.material-description').value = values.description || '';
+        row.querySelector('.material-quantity').value = values.quantity ?? '';
+        row.querySelector('.material-reference').value = values.reference || '';
+        row.querySelector('.material-notes').value = values.notes || '';
+        materialsContainer.appendChild(row);
+        updateRemoveButtons();
+        return row;
+      };
+      const updateConditionalFields = () => {
+        const completed = jobStatus.value === 'Completed';
+        workPerformed.required = completed;
+        acknowledgementName.required = completed;
+        acknowledgementDate.required = completed;
+        workExplained.required = completed;
+        followUpField.hidden = !followUpRequired.checked;
+        followUpDetails.disabled = !followUpRequired.checked;
+        followUpDetails.required = followUpRequired.checked;
+      };
+      const validateRequiredText = () => {
+        form.querySelectorAll('input[required], textarea[required]').forEach((control) => {
+          if (control.type !== 'checkbox' && control.value.trim() === '') control.setCustomValidity('Please complete this required field.');
+          else control.setCustomValidity('');
+        });
+      };
+      const validateDates = () => {
+        const opened = document.querySelector('#date-opened');
+        const completion = document.querySelector('#completion-date');
+        completion.setCustomValidity('');
+        if (opened.value && completion.value && completion.value < opened.value) {
+          completion.setCustomValidity('Completion date cannot be earlier than the opened date.');
+        }
+      };
+      const validateTimes = () => {
+        const arrival = document.querySelector('#arrival-time');
+        const departure = document.querySelector('#departure-time');
+        departure.setCustomValidity('');
+        if (arrival.value && departure.value) {
+          const arrivalMinutes = parseTimeMinutes(arrival.value);
+          const departureMinutes = parseTimeMinutes(departure.value);
+          if (arrivalMinutes === null || departureMinutes === null || departureMinutes < arrivalMinutes) {
+            departure.setCustomValidity('Departure time cannot be earlier than arrival time for this service visit.');
+          }
+        }
+        calculateDuration();
+      };
+      const validateMaterials = () => {
+        let valid = true;
+        getMaterialRows().forEach((row) => {
+          const description = row.querySelector('.material-description');
+          const quantity = row.querySelector('.material-quantity');
+          description.setCustomValidity('');
+          quantity.setCustomValidity('');
+          if (!materialRowHasData(row)) return;
+          if (!description.value.trim()) {
+            description.setCustomValidity('Enter a material or part description.');
+            valid = false;
+          }
+          const parsedQuantity = parseMaterialQuantity(quantity.value);
+          if (parsedQuantity === null) {
+            quantity.setCustomValidity('Quantity must be a finite number greater than zero and no more than 1,000,000.');
+            valid = false;
+          }
+        });
+        return valid;
+      };
+      const validateForm = () => {
+        updateConditionalFields();
+        validateRequiredText();
+        validateDates();
+        validateTimes();
+        validateMaterials();
+        const valid = form.reportValidity();
+        if (!valid) {
+          setMessage('Please correct the highlighted job-card details before continuing.', 'error');
+          form.querySelector(':invalid')?.focus();
+          return false;
+        }
+        return true;
+      };
+      const formatDate = (dateString) => {
+        if (!dateString) return 'Not recorded';
+        const date = new Date(`${dateString}T00:00:00`);
+        return new Intl.DateTimeFormat('en-ZA', { dateStyle: 'long' }).format(date);
+      };
+      const collectJobData = () => {
+        const materials = getMaterialRows().filter(materialRowHasData).map((row) => ({
+          description: row.querySelector('.material-description').value.trim(),
+          quantity: parseMaterialQuantity(row.querySelector('.material-quantity').value),
+          reference: row.querySelector('.material-reference').value.trim(),
+          notes: row.querySelector('.material-notes').value.trim()
+        }));
+        return {
+          businessName: value('#business-name'),
+          technicianName: value('#technician-name'),
+          businessPhone: value('#business-phone'),
+          businessEmail: value('#business-email'),
+          businessAddress: value('#business-address'),
+          customerName: value('#customer-name'),
+          contactPerson: value('#contact-person'),
+          customerPhone: value('#customer-phone'),
+          customerEmail: value('#customer-email'),
+          serviceAddress: value('#service-address'),
+          jobCardNumber: value('#job-card-number'),
+          status: value('#job-status'),
+          priority: value('#job-priority'),
+          dateOpened: value('#date-opened'),
+          scheduledDate: value('#scheduled-date'),
+          completionDate: value('#completion-date'),
+          arrivalTime: value('#arrival-time'),
+          departureTime: value('#departure-time'),
+          duration: calculateDuration(),
+          equipmentType: value('#equipment-type'),
+          equipmentLocation: value('#equipment-location'),
+          equipmentMake: value('#equipment-make'),
+          equipmentModel: value('#equipment-model'),
+          serialNumber: value('#serial-number'),
+          reportedProblem: value('#reported-problem'),
+          inspectionFindings: value('#inspection-findings'),
+          workPerformed: value('#work-performed'),
+          recommendations: value('#recommendations'),
+          internalNotes: value('#internal-notes'),
+          includeInternalNotes: includeInternalNotes.checked,
+          materials,
+          checklist: {
+            areaClean: document.querySelector('#area-clean').checked,
+            equipmentTested: document.querySelector('#equipment-tested').checked,
+            customerInformed: document.querySelector('#customer-informed').checked,
+            followUpRequired: followUpRequired.checked,
+            followUpDetails: value('#follow-up-details')
+          },
+          acknowledgementName: value('#acknowledgement-name'),
+          acknowledgementDate: value('#acknowledgement-date'),
+          workExplained: workExplained.checked
+        };
+      };
+      const textElement = (tag, text, className = '') => {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        return element;
+      };
+      const createParty = (heading, lines) => {
+        const party = document.createElement('section');
+        party.className = 'party';
+        party.appendChild(textElement('h3', heading));
+        lines.filter(Boolean).forEach((line, index) => {
+          const paragraph = document.createElement('p');
+          paragraph.appendChild(index === 0 ? textElement('strong', line) : document.createTextNode(line));
+          party.appendChild(paragraph);
+        });
+        return party;
+      };
+      const createPreviewBlock = (heading, content, className = 'preview-block') => {
+        const section = document.createElement('section');
+        section.className = className;
+        section.append(textElement('h3', heading), textElement('p', content || 'Not recorded'));
+        return section;
+      };
+      const createMetaItem = (label, content) => {
+        const paragraph = document.createElement('p');
+        paragraph.append(textElement('strong', label), document.createTextNode(content));
+        return paragraph;
+      };
+      const renderPreview = (data) => {
+        const header = document.createElement('div');
+        header.className = 'job-preview-header';
+        header.appendChild(textElement('h3', 'JOB CARD', 'job-preview-title'));
+        const meta = document.createElement('div');
+        meta.className = 'job-meta';
+        meta.append(createMetaItem('Job card # ', data.jobCardNumber), createMetaItem('Priority ', data.priority), textElement('span', data.status, 'status-chip'));
+        header.appendChild(meta);
+        const parties = document.createElement('div');
+        parties.className = 'job-parties';
+        parties.append(
+          createParty('Service provider', [data.businessName, data.technicianName, data.businessAddress, data.businessPhone, data.businessEmail]),
+          createParty('Customer', [data.customerName, data.contactPerson, data.serviceAddress, data.customerPhone, data.customerEmail])
+        );
+        const serviceMeta = document.createElement('div');
+        serviceMeta.className = 'service-meta-grid';
+        [
+          ['Opened', formatDate(data.dateOpened)],
+          ['Scheduled', formatDate(data.scheduledDate)],
+          ['Completed', formatDate(data.completionDate)],
+          ['Arrival', data.arrivalTime || 'Not recorded'],
+          ['Departure', data.departureTime || 'Not recorded'],
+          ['Duration', data.duration]
+        ].forEach(([label, content]) => serviceMeta.appendChild(createMetaItem(label, content)));
+
+        const equipmentLines = [
+          data.equipmentType && `Type: ${data.equipmentType}`,
+          data.equipmentMake && `Make: ${data.equipmentMake}`,
+          data.equipmentModel && `Model: ${data.equipmentModel}`,
+          data.serialNumber && `Serial / registration: ${data.serialNumber}`,
+          data.equipmentLocation && `Location: ${data.equipmentLocation}`
+        ].filter(Boolean);
+        const content = [header, parties, serviceMeta];
+        if (equipmentLines.length) content.push(createPreviewBlock('Equipment or asset', equipmentLines.join('\n'), 'preview-equipment'));
+        content.push(
+          createPreviewBlock('Reported problem or request', data.reportedProblem),
+          createPreviewBlock('Inspection findings', data.inspectionFindings),
+          createPreviewBlock('Work performed', data.workPerformed)
+        );
+
+        if (data.materials.length) {
+          const wrap = document.createElement('div');
+          wrap.className = 'preview-table-wrap';
+          wrap.tabIndex = 0;
+          wrap.setAttribute('role', 'region');
+          wrap.setAttribute('aria-label', 'Materials and parts used');
+          const table = document.createElement('table');
+          table.className = 'materials-table';
+          const caption = textElement('caption', 'Materials and parts used', 'sr-only');
+          const head = document.createElement('thead');
+          const headRow = document.createElement('tr');
+          ['Description', 'Qty', 'Part / reference', 'Notes'].forEach((label) => headRow.appendChild(textElement('th', label)));
+          head.appendChild(headRow);
+          const body = document.createElement('tbody');
+          data.materials.forEach((material) => {
+            const row = document.createElement('tr');
+            row.append(textElement('td', material.description), textElement('td', String(material.quantity)), textElement('td', material.reference || '—'), textElement('td', material.notes || '—'));
+            body.appendChild(row);
+          });
+          table.append(caption, head, body);
+          wrap.appendChild(table);
+          content.push(wrap);
+        } else {
+          content.push(createPreviewBlock('Materials and parts', 'No materials recorded.'));
+        }
+
+        const checklist = document.createElement('section');
+        checklist.className = 'preview-block';
+        checklist.appendChild(textElement('h3', 'Completion checklist'));
+        const results = document.createElement('ul');
+        results.className = 'checklist-results';
+        [
+          ['Work area left clean', data.checklist.areaClean],
+          ['Equipment tested', data.checklist.equipmentTested],
+          ['Customer informed', data.checklist.customerInformed],
+          ['Follow-up required', data.checklist.followUpRequired]
+        ].forEach(([label, checked]) => {
+          const item = document.createElement('li');
+          item.append(document.createTextNode(`${label}: `), textElement('strong', checked ? 'Yes' : 'No'));
+          results.appendChild(item);
+        });
+        checklist.appendChild(results);
+        if (data.checklist.followUpRequired) checklist.appendChild(textElement('p', `Follow-up: ${data.checklist.followUpDetails}`));
+        content.push(checklist, createPreviewBlock('Recommendations or follow-up work', data.recommendations));
+        if (data.includeInternalNotes) content.push(createPreviewBlock('Internal notes', data.internalNotes));
+
+        const acknowledgement = document.createElement('section');
+        acknowledgement.className = 'acknowledgement-box';
+        acknowledgement.append(
+          textElement('h3', 'Customer acknowledgement'),
+          textElement('p', data.acknowledgementName ? `Representative: ${data.acknowledgementName}` : 'No customer acknowledgement recorded.'),
+          textElement('p', data.acknowledgementDate ? `Date: ${formatDate(data.acknowledgementDate)}` : 'Date: Not recorded'),
+          textElement('p', `Work and findings explained: ${data.workExplained ? 'Yes' : 'No'}`),
+          textElement('small', 'This typed acknowledgement is a service record and is not a legally verified digital signature.')
+        );
+        content.push(acknowledgement);
+        previewDocument.replaceChildren(...content);
+        previewDocument.hidden = false;
+        previewEmpty.hidden = true;
+      };
+
+      const buildPdf = (data) => {
+        if (!window.jspdf || !window.jspdf.jsPDF) throw new Error('The PDF library could not be loaded. Please check your connection and try again.');
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 16;
+        const contentWidth = pageWidth - (margin * 2);
+        const bottomLimit = pageHeight - 20;
+        const amountX = pageWidth - margin;
+        const lineHeight = 4.3;
+        let y = 0;
+        const drawBrandHeader = (continued = false) => {
+          doc.setFillColor(8, 20, 35);
+          doc.rect(0, 0, pageWidth, 28, 'F');
+          doc.setTextColor(200, 161, 90);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.text('INTERSACKS DIGITAL', margin, 17);
+          doc.setTextColor(248, 248, 246);
+          doc.setFontSize(18);
+          doc.text(continued ? 'JOB CARD — CONTINUED' : 'JOB CARD', amountX, 17, { align: 'right' });
+        };
+        const startPage = () => {
+          doc.addPage();
+          drawBrandHeader(true);
+          y = 38;
+        };
+        const drawInfoBlock = (label, lines, x, top, width) => {
+          doc.setTextColor(142, 110, 50);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text(label, x, top);
+          doc.setTextColor(20, 32, 45);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          let blockY = top + 6;
+          lines.filter(Boolean).forEach((line, index) => {
+            if (index === 0) doc.setFont('helvetica', 'bold');
+            const wrapped = doc.splitTextToSize(String(line), width);
+            doc.text(wrapped, x, blockY);
+            blockY += wrapped.length * 4.3;
+            if (index === 0) doc.setFont('helvetica', 'normal');
+          });
+          return blockY;
+        };
+        const drawTextSection = (label, text) => {
+          if (!text) return;
+          let remaining = doc.splitTextToSize(text, contentWidth);
+          let continued = false;
+          while (remaining.length) {
+            if (y + 14 > bottomLimit) startPage();
+            doc.setTextColor(142, 110, 50);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text(continued ? `${label} — CONTINUED` : label, margin, y + 5);
+            y += 9;
+            const availableLines = Math.max(1, Math.floor((bottomLimit - y) / lineHeight));
+            const lines = remaining.splice(0, availableLines);
+            doc.setTextColor(20, 32, 45);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8.5);
+            doc.text(lines, margin, y);
+            y += (lines.length * lineHeight) + 5;
+            continued = true;
+            if (remaining.length) startPage();
+          }
+        };
+        const drawMaterialsHeader = () => {
+          doc.setFillColor(8, 20, 35);
+          doc.rect(margin, y, contentWidth, 8, 'F');
+          doc.setTextColor(248, 248, 246);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(7.5);
+          doc.text('DESCRIPTION', margin + 2, y + 5.3);
+          doc.text('QTY', 95, y + 5.3, { align: 'right' });
+          doc.text('PART / REFERENCE', 101, y + 5.3);
+          doc.text('NOTES', 143, y + 5.3);
+          y += 8;
+        };
+        const startMaterialPage = () => {
+          startPage();
+          drawMaterialsHeader();
+        };
+
+        drawBrandHeader();
+        doc.setTextColor(20, 32, 45);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text(`JOB CARD # ${data.jobCardNumber}`, amountX, 34, { align: 'right' });
+        doc.text(`STATUS ${data.status.toUpperCase()}`, amountX, 39, { align: 'right' });
+        doc.text(`PRIORITY ${data.priority.toUpperCase()}`, amountX, 44, { align: 'right' });
+        const businessBottom = drawInfoBlock('SERVICE PROVIDER', [data.businessName, `Technician: ${data.technicianName}`, data.businessAddress, data.businessPhone, data.businessEmail], margin, 50, 78);
+        const customerBottom = drawInfoBlock('CUSTOMER', [data.customerName, data.contactPerson, data.serviceAddress, data.customerPhone, data.customerEmail], 112, 50, 80);
+        y = Math.max(businessBottom, customerBottom) + 7;
+        drawTextSection('SERVICE TIMING', `Opened: ${formatDate(data.dateOpened)}\nScheduled: ${formatDate(data.scheduledDate)}\nCompleted: ${formatDate(data.completionDate)}\nArrival: ${data.arrivalTime || 'Not recorded'} | Departure: ${data.departureTime || 'Not recorded'} | Duration: ${data.duration}`);
+        const equipment = [
+          data.equipmentType && `Type: ${data.equipmentType}`,
+          data.equipmentMake && `Make: ${data.equipmentMake}`,
+          data.equipmentModel && `Model: ${data.equipmentModel}`,
+          data.serialNumber && `Serial / registration: ${data.serialNumber}`,
+          data.equipmentLocation && `Location: ${data.equipmentLocation}`
+        ].filter(Boolean).join('\n');
+        drawTextSection('EQUIPMENT OR ASSET', equipment);
+        drawTextSection('REPORTED PROBLEM OR REQUEST', data.reportedProblem);
+        drawTextSection('INSPECTION FINDINGS', data.inspectionFindings);
+        drawTextSection('WORK PERFORMED', data.workPerformed);
+
+        if (data.materials.length) {
+          if (y + 18 > bottomLimit) startPage();
+          doc.setTextColor(142, 110, 50);
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8);
+          doc.text('MATERIALS AND PARTS', margin, y + 5);
+          y += 9;
+          drawMaterialsHeader();
+          data.materials.forEach((material) => {
+            let descriptionLines = doc.splitTextToSize(material.description, 65);
+            let referenceLines = doc.splitTextToSize(material.reference || '—', 36);
+            let noteLines = doc.splitTextToSize(material.notes || '—', 49);
+            let firstPart = true;
+            while (descriptionLines.length || referenceLines.length || noteLines.length) {
+              let availableLines = Math.floor((bottomLimit - y - 3) / lineHeight);
+              if (availableLines < 1) {
+                startMaterialPage();
+                availableLines = Math.floor((bottomLimit - y - 3) / lineHeight);
+              }
+              const lineCount = Math.min(availableLines, Math.max(descriptionLines.length, referenceLines.length, noteLines.length));
+              const descriptionChunk = descriptionLines.splice(0, lineCount);
+              const referenceChunk = referenceLines.splice(0, lineCount);
+              const noteChunk = noteLines.splice(0, lineCount);
+              const rowHeight = Math.max(9, (lineCount * lineHeight) + 3);
+              doc.setTextColor(20, 32, 45);
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(8);
+              if (descriptionChunk.length) doc.text(descriptionChunk, margin + 2, y + 5);
+              if (firstPart) doc.text(String(material.quantity), 95, y + 5, { align: 'right' });
+              if (referenceChunk.length) doc.text(referenceChunk, 101, y + 5);
+              if (noteChunk.length) doc.text(noteChunk, 143, y + 5);
+              firstPart = false;
+              y += rowHeight;
+              doc.setDrawColor(210, 210, 203);
+              doc.line(margin, y, amountX, y);
+              if (descriptionLines.length || referenceLines.length || noteLines.length) startMaterialPage();
+            }
+          });
+          y += 5;
+        } else {
+          drawTextSection('MATERIALS AND PARTS', 'No materials recorded.');
+        }
+
+        drawTextSection('COMPLETION CHECKLIST', [
+          `Work area left clean: ${data.checklist.areaClean ? 'Yes' : 'No'}`,
+          `Equipment tested: ${data.checklist.equipmentTested ? 'Yes' : 'No'}`,
+          `Customer informed: ${data.checklist.customerInformed ? 'Yes' : 'No'}`,
+          `Follow-up required: ${data.checklist.followUpRequired ? 'Yes' : 'No'}`,
+          data.checklist.followUpRequired ? `Follow-up details: ${data.checklist.followUpDetails}` : ''
+        ].filter(Boolean).join('\n'));
+        drawTextSection('RECOMMENDATIONS OR FOLLOW-UP WORK', data.recommendations);
+        if (data.includeInternalNotes) drawTextSection('INTERNAL NOTES', data.internalNotes);
+        drawTextSection('CUSTOMER ACKNOWLEDGEMENT', `${data.acknowledgementName ? `Representative: ${data.acknowledgementName}` : 'No customer acknowledgement recorded.'}\nDate: ${formatDate(data.acknowledgementDate)}\nWork and findings explained: ${data.workExplained ? 'Yes' : 'No'}\nThis typed acknowledgement is a service record and is not a legally verified digital signature.`);
+
+        const pageCount = doc.getNumberOfPages();
+        for (let page = 1; page <= pageCount; page += 1) {
+          doc.setPage(page);
+          doc.setTextColor(104, 113, 122);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7);
+          doc.text(`Page ${page} of ${pageCount}`, amountX, pageHeight - 9, { align: 'right' });
+          doc.text('Service record — browser-generated proof of work.', margin, pageHeight - 9);
+        }
+        return doc;
+      };
+      const previewJobCard = () => {
+        if (!validateForm()) return false;
+        renderPreview(collectJobData());
+        setMessage('Job card preview updated.', 'success');
+        previewTitle.focus();
+        return true;
+      };
+      const downloadPdf = () => {
+        if (!validateForm()) return false;
+        const data = collectJobData();
+        renderPreview(data);
+        try {
+          const doc = buildPdf(data);
+          const safeNumber = data.jobCardNumber.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'service-record';
+          doc.save(`job-card-${safeNumber}.pdf`);
+          setMessage('PDF job card downloaded.', 'success');
+          return true;
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'The PDF could not be created.', 'error');
+          return false;
+        }
+      };
+      const localDateString = (date) => new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+      const applyDefaults = () => {
+        const today = new Date();
+        document.querySelector('#job-card-number').value = `JC-${today.getFullYear()}-001`;
+        document.querySelector('#date-opened').value = localDateString(today);
+        jobStatus.value = 'Open';
+        document.querySelector('#job-priority').value = 'Normal';
+        followUpRequired.checked = false;
+        includeInternalNotes.checked = false;
+        updateConditionalFields();
+        calculateDuration();
+      };
+      const clearPreview = () => {
+        previewDocument.replaceChildren();
+        previewDocument.hidden = true;
+        previewEmpty.hidden = false;
+      };
+      const resetJobCard = () => {
+        if (!window.confirm('Clear this job card and restore the default form?')) return false;
+        form.reset();
+        form.querySelectorAll('input, select, textarea').forEach((control) => control.setCustomValidity(''));
+        materialsContainer.replaceChildren();
+        applyDefaults();
+        addMaterial();
+        clearPreview();
+        setMessage('Job card form reset.', 'success');
+        document.querySelector('#business-name').focus();
+        return true;
+      };
+
+      materialsContainer.addEventListener('input', (event) => {
+        event.target.setCustomValidity('');
+        setMessage();
+      });
+      materialsContainer.addEventListener('click', (event) => {
+        const removeButton = event.target.closest('.remove-button');
+        if (!removeButton) return;
+        if (getMaterialRows().length > 1) removeButton.closest('.material-row').remove();
+        updateRemoveButtons();
+        setMessage();
+      });
+      form.addEventListener('input', (event) => {
+        event.target.setCustomValidity('');
+        updateConditionalFields();
+        calculateDuration();
+        setMessage();
+      });
+      form.addEventListener('change', () => {
+        updateConditionalFields();
+        calculateDuration();
+        setMessage();
+      });
+      form.addEventListener('submit', (event) => event.preventDefault());
+      addMaterialButton.addEventListener('click', () => addMaterial());
+      previewButton.addEventListener('click', previewJobCard);
+      downloadButton.addEventListener('click', downloadPdf);
+      resetButton.addEventListener('click', resetJobCard);
+
+      applyDefaults();
+      addMaterial();
+      window.jobCardGenerator = {
+        addMaterial,
+        buildPdf,
+        calculateDuration,
+        collectJobData,
+        downloadPdf,
+        formatDuration,
+        parseMaterialQuantity,
+        previewJobCard,
+        renderPreview,
+        resetJobCard,
+        validateForm
+      };
+    })();
+  </script>
+</body>
+</html>
