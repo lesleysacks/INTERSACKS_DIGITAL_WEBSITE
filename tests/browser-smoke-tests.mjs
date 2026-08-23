@@ -21,7 +21,8 @@ const pages = [
   'payments.html',
   'assets/invoice_generator.html',
   'assets/quote_generator.html',
-  'assets/job_card_generator.html'
+  'assets/job_card_generator.html',
+  'assets/whatsapp_order_builder.html'
 ];
 
 const failures = [];
@@ -174,6 +175,7 @@ for (const width of widths) {
 
   await navigate('work.html');
   await evaluate(`(async () => {
+    if (document.fonts) await document.fonts.ready;
     const images = [...document.querySelectorAll('.featured-project-image, .project-card-image')];
     for (const image of images) {
       image.scrollIntoView({ block: 'center' });
@@ -194,7 +196,7 @@ for (const width of widths) {
   const expectedColumns = width <= 375 ? 1 : width === 768 ? 2 : 3;
   assert(workLayout.columns === expectedColumns, `Work grid uses ${expectedColumns} column(s) at ${width}px`);
   assert(workLayout.imagesReady && workLayout.imageMetadata, `Work images load with 1440×900 metadata and object-fit cover at ${width}px`);
-  assert(workLayout.actionHeight >= 44, `Work action links are at least 44px high at ${width}px`);
+  assert(workLayout.actionHeight >= 44, `Work action links are at least 44px high at ${width}px (measured ${workLayout.actionHeight}px)`);
 }
 
 await send('Emulation.setScriptExecutionDisabled', { value: true });
@@ -233,6 +235,15 @@ const jobCardReducedMotion = await evaluate(`(() => {
 assert(jobCardReducedMotion, 'Job Card Generator respects reduced-motion preferences');
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
 
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await navigate('assets/whatsapp_order_builder.html');
+const orderBuilderReducedMotion = await evaluate(`(() => {
+  const style = getComputedStyle(document.querySelector('.button'));
+  return getComputedStyle(document.documentElement).scrollBehavior === 'auto' && parseFloat(style.transitionDuration) <= 0.001;
+})()`);
+assert(orderBuilderReducedMotion, 'WhatsApp Order Builder respects reduced-motion preferences');
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
+
 await navigate('index.html');
 const homepage = await evaluate(`(() => ({
   text: document.body.innerText,
@@ -257,6 +268,8 @@ const workContent = await evaluate(`(() => {
     software: [...document.querySelectorAll('.software-automation .recent-project-card h3')].map((heading) => heading.textContent.trim()),
     jobCardLink: document.querySelector('a[href="assets/job_card_generator.html"]')?.textContent.trim(),
     jobCardImage: document.querySelector('img[src="assets/images/projects/job-card-generator.webp"]')?.getAttribute('alt'),
+    orderBuilderLink: document.querySelector('a[href="assets/whatsapp_order_builder.html"]')?.textContent.trim(),
+    orderBuilderImage: document.querySelector('img[src="assets/images/projects/whatsapp-order-builder.webp"]')?.getAttribute('alt'),
     wonderAlt: document.querySelector('img[src$="wondercubs-studio.webp"]').alt,
     text: document.body.innerText,
     externalLinksValid: [...document.querySelectorAll('a[href^="http"]')].every((link) => link.target === '_blank' && link.relList.contains('noopener') && link.relList.contains('noreferrer'))
@@ -264,8 +277,9 @@ const workContent = await evaluate(`(() => {
 })()`);
 assert(workContent.featured.join('|') === 'Generative A.I — Industrial Automation|Sticky Notes Capstone|WonderCubs Studio — In Development', 'Featured Work uses the specified order and status');
 assert(workContent.recent.join('|') === 'SNA Cleaning Services|AJ Air Systems|Lee’s Nail It Salon|Ultimate Liquors|Cay Accessories|D’vine Funeral Home|Valentine’s Cards', 'Recent Projects uses the specified seven-project order');
-assert(workContent.software.join('|') === 'Invoice Generator|Quote Generator|Job Card Generator', 'Software & Automation contains Invoice Generator, Quote Generator and Job Card Generator in order');
+assert(workContent.software.join('|') === 'Invoice Generator|Quote Generator|Job Card Generator|WhatsApp Order Builder', 'Software & Automation contains all four working browser tools in order');
 assert(workContent.jobCardLink === 'Open Live Tool ↗' && /Job Card Generator/.test(workContent.jobCardImage), 'Job Card Work card uses the correct local tool link and meaningful screenshot alt text');
+assert(workContent.orderBuilderLink === 'Open Live Tool ↗' && /WhatsApp Order Builder/.test(workContent.orderBuilderImage), 'WhatsApp Order Builder Work card uses the correct local tool link and meaningful screenshot alt text');
 assert(workContent.wonderAlt === 'WonderCubs Studio application architecture diagram', 'WonderCubs architecture image has accurate alt text');
 assert(!/AI agents|working AI|InterSacks Office Automation|Excel Report Generator|PDF-to-Excel Extractor|Folder Auto Backup|Bulk File Renamer/i.test(workContent.text), 'Work page removes overstated AI and planned Python automation claims');
 assert(!workContent.badges.some((badge) => /Website|Interactive Design|Funeral Services|E-commerce/i.test(badge)), 'Work technology badges contain no project-type or industry labels');
@@ -1177,8 +1191,427 @@ assert(!jobCard.missingLibraryDownload && /could not be loaded/i.test(jobCard.mi
 assert(!jobCard.cancelledReset && jobCard.cancelledResetPreserved && jobCard.confirmedReset, 'Job Card reset requires confirmation and preserves data when cancelled');
 assert(jobCard.resetState.rowCount === 1 && jobCard.resetState.description === '' && jobCard.resetState.status === 'Open' && jobCard.resetState.priority === 'Normal' && !jobCard.resetState.followUp && jobCard.resetState.followUpHidden && !jobCard.resetState.includeInternalNotes && jobCard.resetState.previewHidden && jobCard.resetState.businessName === '' && jobCard.resetState.focused === 'business-name' && jobCard.resetState.hasOpenedDate && /^JC-\d{4}-001$/.test(jobCard.resetState.number), 'Confirmed Job Card reset restores one blank material row, defaults, empty preview and first-field focus');
 
+await navigate('assets/whatsapp_order_builder.html');
+await waitFor('Boolean(window.whatsAppOrderBuilder)');
+const orderBuilder = await evaluate(`(async () => {
+  const api = window.whatsAppOrderBuilder;
+  const form = document.querySelector('#order-form');
+  const setValue = (selector, value, root = document) => {
+    const control = root.querySelector(selector);
+    control.value = value;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return control;
+  };
+  const setFulfilment = (value) => {
+    const control = document.querySelector('input[name="fulfilment"][value="' + value + '"]');
+    control.checked = true;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return control;
+  };
+  const rows = () => [...document.querySelectorAll('.item-row')];
+  const resetRows = () => {
+    rows().slice(1).forEach((row) => row.remove());
+    const row = rows()[0] || api.addItem();
+    setValue('.item-description', 'Sample service item', row);
+    setValue('.item-variant', 'Standard option', row);
+    setValue('.item-quantity', '1', row);
+    setValue('.item-price', '1.00', row);
+    api.calculateTotals();
+    return row;
+  };
+  const completeDetails = () => {
+    setValue('#business-name', 'Sample Test Business');
+    setValue('#whatsapp-number', '084 325 2262');
+    setValue('#order-instructions', 'Please confirm preparation timing.');
+    setValue('#customer-name', 'Sample Customer');
+    setValue('#customer-phone', '082 000 0000');
+    setValue('#order-number', 'ORD-2026-001');
+    setValue('#order-date', '2026-08-23');
+    setValue('#requested-date', '2026-08-25');
+    setValue('#requested-time', '13:30');
+    setValue('#customer-notes', 'Please package items separately.');
+    setFulfilment('Collection');
+    resetRows();
+  };
+  const rejectsPhone = (input) => {
+    try { api.normalizePhoneNumber(input); return false; } catch { return true; }
+  };
+
+  const initialState = {
+    rowCount: rows().length,
+    removeHidden: rows()[0].querySelector('.remove-button').hidden,
+    number: document.querySelector('#order-number').value,
+    hasOrderDate: Boolean(document.querySelector('#order-date').value),
+    hasRequestedDate: Boolean(document.querySelector('#requested-date').value),
+    collectionChecked: document.querySelector('#fulfilment-collection').checked,
+    deliveryHidden: document.querySelector('#delivery-fields').hidden,
+    deliveryAddressDisabled: document.querySelector('#delivery-address').disabled,
+    deliveryFeeDisabled: document.querySelector('#delivery-fee').disabled,
+    deliveryFee: document.querySelector('#delivery-fee').value,
+    destinationBlank: document.querySelector('#whatsapp-number').value === '',
+    privacyNotice: document.body.innerText.includes('Order information remains in this browser session') && document.body.innerText.includes('does not upload or store it') && document.body.innerText.includes('WhatsApp’s terms and privacy practices'),
+    boundaryNotice: document.body.innerText.includes('order request only') && document.body.innerText.includes('No stock is reserved') && document.body.innerText.includes('no payment is processed') && document.body.innerText.includes('does not prove the message was sent or received'),
+    forbiddenControls: Boolean(document.querySelector('[name*="tax" i], [name*="discount" i], [name*="deposit" i], [name*="payment" i], [name*="card" i]')),
+    minimumTargetHeight: Math.min(...[...document.querySelectorAll('button, a, input:not([type="radio"]), textarea, .radio-field label')]
+      .filter((control) => control.getClientRects().length)
+      .map((control) => control.getBoundingClientRect().height))
+  };
+
+  const phoneResults = {
+    local: api.normalizePhoneNumber('084 325 2262'),
+    plusInternational: api.normalizePhoneNumber('+27 84 325 2262'),
+    directInternational: api.normalizePhoneNumber('27843252262'),
+    formatted: api.normalizePhoneNumber('(084)-325-2262'),
+    foreignUnchanged: api.normalizePhoneNumber('+44 20 7946 0958'),
+    rejectsLetters: rejectsPhone('084 ABC 2262'),
+    rejectsMisplacedPlus: rejectsPhone('27+843252262'),
+    rejectsRepeatedPlus: rejectsPhone('++27843252262'),
+    rejectsShort: rejectsPhone('1234567'),
+    rejectsLong: rejectsPhone('1234567890123456'),
+    rejectsDoubleZero: rejectsPhone('0027843252262')
+  };
+
+  document.querySelector('#add-item-button').click();
+  const addedRowCount = rows().length;
+  const secondRemoveVisible = !rows()[1].querySelector('.remove-button').hidden;
+  rows()[1].querySelector('.remove-button').click();
+  const removedRowCount = rows().length;
+  const retainedRemoveHidden = rows()[0].querySelector('.remove-button').hidden;
+
+  completeDetails();
+  let reportValidityCalls = 0;
+  const originalReportValidity = form.reportValidity.bind(form);
+  form.reportValidity = () => { reportValidityCalls += 1; return originalReportValidity(); };
+
+  let row = resetRows();
+  setValue('.item-quantity', '2.5', row);
+  setValue('.item-price', '99.99', row);
+  const decimalTotals = api.calculateTotals();
+  const decimalLine = {
+    amount: row.querySelector('.item-amount').value,
+    subtotalCents: decimalTotals.subtotalCents,
+    totalCents: decimalTotals.totalCents
+  };
+  api.addItem({ description: 'Decimal item two', variant: 'Medium', quantity: 1.25, unitPrice: 10.01 });
+  api.addItem({ description: 'Decimal item three', quantity: 3.5, unitPrice: 0.10 });
+  const multipleTotals = api.calculateTotals();
+
+  setFulfilment('Delivery');
+  setValue('#delivery-address', '10 Example Avenue, Paarl');
+  setValue('#delivery-fee', '35.55');
+  const deliveryTotals = api.calculateTotals();
+  const deliveryState = {
+    shown: !document.querySelector('#delivery-fields').hidden,
+    addressEnabled: !document.querySelector('#delivery-address').disabled,
+    addressRequired: document.querySelector('#delivery-address').required,
+    feeEnabled: !document.querySelector('#delivery-fee').disabled,
+    feeCents: deliveryTotals.deliveryFeeCents,
+    totalCents: deliveryTotals.totalCents
+  };
+  setFulfilment('Collection');
+  const collectionTotals = api.calculateTotals();
+  const collectionState = {
+    hidden: document.querySelector('#delivery-fields').hidden,
+    addressDisabled: document.querySelector('#delivery-address').disabled,
+    feeDisabled: document.querySelector('#delivery-fee').disabled,
+    feeValue: document.querySelector('#delivery-fee').value,
+    feeCents: collectionTotals.deliveryFeeCents,
+    totalCents: collectionTotals.totalCents
+  };
+
+  const originalOpen = window.open;
+  let invalidOpenCalls = 0;
+  window.open = () => { invalidOpenCalls += 1; return { opener: null }; };
+  completeDetails();
+
+  setFulfilment('Delivery');
+  setValue('#delivery-address', '');
+  const deliveryWithoutAddressValid = api.validateForm();
+  const deliveryWithoutAddressOpen = api.openWhatsApp();
+  setValue('#delivery-address', '10 Example Avenue, Paarl');
+  setValue('#delivery-fee', '-1');
+  const negativeDeliveryFeeValid = api.validateForm();
+  const negativeDeliveryFeeOpen = api.openWhatsApp();
+  setValue('#delivery-fee', '10000000');
+  const excessiveDeliveryFeeValid = api.validateForm();
+  const excessiveDeliveryFeeOpen = api.openWhatsApp();
+  setValue('#delivery-fee', '35.00');
+
+  setValue('#requested-date', '2026-08-22');
+  const invalidDateValid = api.validateForm();
+  const invalidDateOpen = api.openWhatsApp();
+  setValue('#requested-date', '2026-08-25');
+  setValue('#whatsapp-number', '084 INVALID');
+  const invalidPhoneValid = api.validateForm();
+  const invalidPhoneOpen = api.openWhatsApp();
+  setValue('#whatsapp-number', '084 325 2262');
+
+  row = resetRows();
+  setValue('.item-quantity', '0', row);
+  const zeroQuantityValid = api.validateForm();
+  const zeroQuantityOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-quantity', '-1', row);
+  const negativeQuantityValid = api.validateForm();
+  const negativeQuantityOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-quantity', 'not-a-number', row);
+  const nonNumericQuantityValid = api.validateForm();
+  const nonNumericQuantityOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-quantity', '1000001', row);
+  const excessiveQuantityValid = api.validateForm();
+  const excessiveQuantityOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-price', '0', row);
+  const zeroPriceValid = api.validateForm();
+  const zeroPriceOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-price', '-1', row);
+  const negativePriceValid = api.validateForm();
+  const negativePriceOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-price', 'not-a-number', row);
+  const nonNumericPriceValid = api.validateForm();
+  const nonNumericPriceOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-price', '10000000', row);
+  const excessivePriceValid = api.validateForm();
+  const excessivePriceOpen = api.openWhatsApp();
+  row = resetRows();
+  setValue('.item-description', '', row);
+  const blankDescriptionValid = api.validateForm();
+  const blankDescriptionOpen = api.openWhatsApp();
+
+  completeDetails();
+  rows().forEach((itemRow) => itemRow.remove());
+  const noItemsValid = api.validateForm();
+  const noItemsOpen = api.openWhatsApp();
+
+  completeDetails();
+  rows().slice(1).forEach((itemRow) => itemRow.remove());
+  row = rows()[0];
+  setValue('.item-description', 'Length-limit item '.repeat(10), row);
+  setValue('.item-variant', 'Detailed variant '.repeat(5), row);
+  setValue('.item-quantity', '1', row);
+  setValue('.item-price', '1.00', row);
+  for (let index = 1; index < 22; index += 1) {
+    api.addItem({
+      description: 'Length-limit item description '.repeat(7) + index,
+      variant: 'Detailed variant option '.repeat(3),
+      quantity: 1,
+      unitPrice: 1
+    });
+  }
+  const longMessage = api.buildOrderMessage(api.collectOrderData());
+  const longMessageValid = api.validateForm();
+  const longMessageOpen = api.openWhatsApp();
+  const lengthMessage = document.querySelector('#form-message').textContent;
+  const invalidOpenCount = invalidOpenCalls;
+  window.open = originalOpen;
+
+  completeDetails();
+  setFulfilment('Delivery');
+  setValue('#delivery-address', '10 Example Avenue, Paarl');
+  setValue('#delivery-fee', '35.00');
+  row = resetRows();
+  setValue('.item-description', 'Sample product bundle', row);
+  setValue('.item-variant', 'Standard option', row);
+  setValue('.item-quantity', '2.5', row);
+  setValue('.item-price', '99.99', row);
+  setValue('#order-number', 'ORD-2026-014');
+  const previewed = api.previewOrder();
+  const previewFocused = document.activeElement.id === 'preview-title';
+  const preparedData = api.collectOrderData();
+  const preparedMessage = api.buildOrderMessage(preparedData);
+  const preparedUrl = api.buildWhatsAppUrl(preparedData.destinationNumber, preparedMessage);
+  const previewText = document.querySelector('#preview-document').textContent;
+  const messagePreview = document.querySelector('.message-preview').textContent;
+  const decodedMessage = decodeURIComponent(preparedUrl.split('text=')[1]);
+  const prohibitedClaims = /Order confirmed|Order accepted|Stock reserved|Payment received|Payment successful|Order submitted successfully/i.test(preparedMessage);
+
+  const originalClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  const copiedMessages = [];
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async (text) => { copiedMessages.push(text); } }
+  });
+  const copiedResult = await api.copyOrderMessage();
+
+  const originalExecCommand = document.execCommand;
+  let fallbackText = '';
+  Object.defineProperty(navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: async () => { throw new Error('Clipboard denied'); } }
+  });
+  document.execCommand = () => {
+    fallbackText = document.activeElement?.value || '';
+    return true;
+  };
+  const fallbackCopyResult = await api.copyOrderMessage();
+  document.execCommand = () => false;
+  const failedCopyResult = await api.copyOrderMessage();
+  const failedCopyMessage = document.querySelector('#form-message').textContent;
+  document.execCommand = originalExecCommand;
+  if (originalClipboardDescriptor) Object.defineProperty(navigator, 'clipboard', originalClipboardDescriptor);
+  else delete navigator.clipboard;
+
+  const openCalls = [];
+  const openedContext = { opener: 'unsafe' };
+  window.open = (url, target, features) => {
+    openCalls.push({ url, target, features });
+    return openedContext;
+  };
+  const openedUrl = api.openWhatsApp();
+  const openUiMessage = document.querySelector('#form-message').textContent;
+  window.open = originalOpen;
+
+  setValue('.item-description', '<img src=x onerror=alert(1)>', row);
+  setValue('#customer-notes', '<script>alert(1)<\\/script>');
+  const safePreview = api.previewOrder();
+  const safePreviewText = document.querySelector('#preview-document').textContent;
+  const unsafePreviewNodes = document.querySelector('#preview-document img, #preview-document script, #preview-document iframe');
+
+  setValue('#business-name', 'Keep this value');
+  const originalConfirm = window.confirm;
+  window.confirm = () => false;
+  const cancelledReset = api.resetOrder();
+  const cancelledResetPreserved = document.querySelector('#business-name').value === 'Keep this value';
+  window.confirm = () => true;
+  const confirmedReset = api.resetOrder();
+  const resetState = {
+    businessName: document.querySelector('#business-name').value,
+    destinationNumber: document.querySelector('#whatsapp-number').value,
+    customerName: document.querySelector('#customer-name').value,
+    rowCount: rows().length,
+    description: rows()[0].querySelector('.item-description').value,
+    quantity: rows()[0].querySelector('.item-quantity').value,
+    collectionChecked: document.querySelector('#fulfilment-collection').checked,
+    deliveryHidden: document.querySelector('#delivery-fields').hidden,
+    deliveryAddressDisabled: document.querySelector('#delivery-address').disabled,
+    deliveryFeeDisabled: document.querySelector('#delivery-fee').disabled,
+    deliveryFee: document.querySelector('#delivery-fee').value,
+    previewHidden: document.querySelector('#preview-document').hidden,
+    focused: document.activeElement.id,
+    hasOrderDate: Boolean(document.querySelector('#order-date').value),
+    hasRequestedDate: Boolean(document.querySelector('#requested-date').value),
+    number: document.querySelector('#order-number').value
+  };
+  window.confirm = originalConfirm;
+
+  return {
+    initialState,
+    phoneResults,
+    addedRowCount,
+    secondRemoveVisible,
+    removedRowCount,
+    retainedRemoveHidden,
+    decimalLine,
+    multipleTotals,
+    deliveryState,
+    collectionState,
+    deliveryWithoutAddressValid,
+    deliveryWithoutAddressOpen,
+    negativeDeliveryFeeValid,
+    negativeDeliveryFeeOpen,
+    excessiveDeliveryFeeValid,
+    excessiveDeliveryFeeOpen,
+    invalidDateValid,
+    invalidDateOpen,
+    invalidPhoneValid,
+    invalidPhoneOpen,
+    zeroQuantityValid,
+    zeroQuantityOpen,
+    negativeQuantityValid,
+    negativeQuantityOpen,
+    nonNumericQuantityValid,
+    nonNumericQuantityOpen,
+    excessiveQuantityValid,
+    excessiveQuantityOpen,
+    zeroPriceValid,
+    zeroPriceOpen,
+    negativePriceValid,
+    negativePriceOpen,
+    nonNumericPriceValid,
+    nonNumericPriceOpen,
+    excessivePriceValid,
+    excessivePriceOpen,
+    blankDescriptionValid,
+    blankDescriptionOpen,
+    noItemsValid,
+    noItemsOpen,
+    rejectsNonFinite: api.parseQuantity(Infinity) === null && api.parseQuantity(-Infinity) === null && api.parseMoneyCents(Infinity) === null && api.calculateLineCents(Infinity, 1) === null && api.calculateLineCents(1, Infinity) === null,
+    longMessageLength: longMessage.length,
+    longMessageValid,
+    longMessageOpen,
+    lengthMessage,
+    invalidOpenCount,
+    reportValidityCalls,
+    previewed,
+    previewFocused,
+    preparedData,
+    preparedMessage,
+    preparedUrl,
+    decodedMessage,
+    messagePreview,
+    previewText,
+    prohibitedClaims,
+    copiedResult,
+    copiedMessage: copiedMessages[0],
+    fallbackCopyResult,
+    fallbackText,
+    failedCopyResult,
+    failedCopyMessage,
+    openedUrl,
+    openCalls,
+    openedOpener: openedContext.opener,
+    openUiMessage,
+    safePreview,
+    safePreviewText,
+    unsafePreviewNodes: Boolean(unsafePreviewNodes),
+    cancelledReset,
+    cancelledResetPreserved,
+    confirmedReset,
+    resetState
+  };
+})()`);
+
+assert(orderBuilder.initialState.rowCount === 1 && orderBuilder.initialState.removeHidden && /^ORD-\d{4}-001$/.test(orderBuilder.initialState.number) && orderBuilder.initialState.hasOrderDate && orderBuilder.initialState.hasRequestedDate && orderBuilder.initialState.destinationBlank, 'WhatsApp Order Builder starts with one retained item, editable generated number, dates and no prefilled destination number');
+assert(orderBuilder.initialState.collectionChecked && orderBuilder.initialState.deliveryHidden && orderBuilder.initialState.deliveryAddressDisabled && orderBuilder.initialState.deliveryFeeDisabled && orderBuilder.initialState.deliveryFee === '0.00', 'WhatsApp Order Builder defaults to Collection with delivery controls hidden, disabled and zeroed');
+assert(orderBuilder.initialState.privacyNotice && orderBuilder.initialState.boundaryNotice && !orderBuilder.initialState.forbiddenControls, 'WhatsApp Order Builder states browser-session privacy and request boundaries without checkout or payment controls');
+assert(orderBuilder.initialState.minimumTargetHeight >= 44, 'WhatsApp Order Builder interactive targets are at least 44px high');
+assert(orderBuilder.phoneResults.local === '27843252262' && orderBuilder.phoneResults.plusInternational === '27843252262' && orderBuilder.phoneResults.directInternational === '27843252262' && orderBuilder.phoneResults.formatted === '27843252262', 'WhatsApp number normalization handles South African local and international readable formats');
+assert(orderBuilder.phoneResults.foreignUnchanged === '442079460958' && orderBuilder.phoneResults.rejectsLetters && orderBuilder.phoneResults.rejectsMisplacedPlus && orderBuilder.phoneResults.rejectsRepeatedPlus && orderBuilder.phoneResults.rejectsShort && orderBuilder.phoneResults.rejectsLong && orderBuilder.phoneResults.rejectsDoubleZero, 'WhatsApp number normalization preserves valid foreign country codes and rejects malformed numbers');
+assert(orderBuilder.addedRowCount === 2 && orderBuilder.secondRemoveVisible && orderBuilder.removedRowCount === 1 && orderBuilder.retainedRemoveHidden, 'WhatsApp Order Builder adds and removes item rows while retaining one row');
+assert(orderBuilder.decimalLine.amount === 'R249.98' && orderBuilder.decimalLine.subtotalCents === 24998 && orderBuilder.decimalLine.totalCents === 24998, 'Order line calculates 2.5 × R99.99 as R249.98 using integer cents');
+assert(orderBuilder.multipleTotals.subtotalCents === 26284 && orderBuilder.multipleTotals.totalCents === 26284, 'Multiple decimal order rows remain cent-accurate at R262.84');
+assert(orderBuilder.deliveryState.shown && orderBuilder.deliveryState.addressEnabled && orderBuilder.deliveryState.addressRequired && orderBuilder.deliveryState.feeEnabled && orderBuilder.deliveryState.feeCents === 3555 && orderBuilder.deliveryState.totalCents === 29839, 'Delivery reveals and requires its address while adding the R35.55 fee exactly once');
+assert(orderBuilder.collectionState.hidden && orderBuilder.collectionState.addressDisabled && orderBuilder.collectionState.feeDisabled && orderBuilder.collectionState.feeValue === '0.00' && orderBuilder.collectionState.feeCents === 0 && orderBuilder.collectionState.totalCents === 26284, 'Collection hides, disables and zeroes delivery fields without changing the item subtotal');
+assert(!orderBuilder.deliveryWithoutAddressValid && !orderBuilder.deliveryWithoutAddressOpen && !orderBuilder.negativeDeliveryFeeValid && !orderBuilder.negativeDeliveryFeeOpen && !orderBuilder.excessiveDeliveryFeeValid && !orderBuilder.excessiveDeliveryFeeOpen, 'Delivery requires an address and rejects invalid or excessive fees without opening WhatsApp');
+assert(!orderBuilder.invalidDateValid && !orderBuilder.invalidDateOpen && !orderBuilder.invalidPhoneValid && !orderBuilder.invalidPhoneOpen, 'Earlier requested dates and malformed destination numbers block WhatsApp opening');
+assert(!orderBuilder.zeroQuantityValid && !orderBuilder.zeroQuantityOpen && !orderBuilder.negativeQuantityValid && !orderBuilder.negativeQuantityOpen && !orderBuilder.nonNumericQuantityValid && !orderBuilder.nonNumericQuantityOpen && !orderBuilder.excessiveQuantityValid && !orderBuilder.excessiveQuantityOpen, 'WhatsApp Order Builder rejects zero, negative, non-numeric and excessive quantities');
+assert(!orderBuilder.zeroPriceValid && !orderBuilder.zeroPriceOpen && !orderBuilder.negativePriceValid && !orderBuilder.negativePriceOpen && !orderBuilder.nonNumericPriceValid && !orderBuilder.nonNumericPriceOpen && !orderBuilder.excessivePriceValid && !orderBuilder.excessivePriceOpen, 'WhatsApp Order Builder rejects zero, negative, non-numeric and excessive unit prices');
+assert(!orderBuilder.zeroPriceValid && !orderBuilder.zeroPriceOpen, 'A zero-total order request is blocked before WhatsApp can open');
+assert(!orderBuilder.blankDescriptionValid && !orderBuilder.blankDescriptionOpen && !orderBuilder.noItemsValid && !orderBuilder.noItemsOpen && orderBuilder.rejectsNonFinite, 'WhatsApp Order Builder rejects blank descriptions, requests without items and non-finite calculations');
+assert(orderBuilder.longMessageLength > 4000 && !orderBuilder.longMessageValid && !orderBuilder.longMessageOpen && /exceeds 4000 characters/i.test(orderBuilder.lengthMessage), 'WhatsApp Order Builder blocks messages over the 4,000-character limit');
+assert(orderBuilder.invalidOpenCount === 0, 'Invalid order requests never call window.open');
+assert(orderBuilder.reportValidityCalls > 0, 'WhatsApp Order Builder actions call reportValidity before continuing');
+assert(orderBuilder.previewed && orderBuilder.previewFocused && orderBuilder.messagePreview === orderBuilder.preparedMessage && orderBuilder.decodedMessage === orderBuilder.preparedMessage, 'Order preview receives focus and shows the exact decoded WhatsApp message');
+assert(orderBuilder.preparedData.subtotalCents === 24998 && orderBuilder.preparedData.deliveryFeeCents === 3500 && orderBuilder.preparedData.totalCents === 28498 && orderBuilder.previewText.includes('R249.98') && orderBuilder.previewText.includes('R35.00') && orderBuilder.previewText.includes('R284.98') && orderBuilder.preparedMessage.includes('Subtotal: R249.98') && orderBuilder.preparedMessage.includes('Delivery fee: R35.00') && orderBuilder.preparedMessage.includes('Requested total: R284.98'), 'Order form, preview and WhatsApp message use matching itemized totals');
+assert(/^https:\/\/wa\.me\/27843252262\?text=/.test(orderBuilder.preparedUrl) && orderBuilder.preparedUrl.endsWith(encodeURIComponent(orderBuilder.preparedMessage)) && !orderBuilder.preparedMessage.includes(orderBuilder.preparedData.destinationNumber), 'WhatsApp URL uses the normalized number and correctly encoded message without repeating the destination number');
+assert(/This is an order request/i.test(orderBuilder.preparedMessage) && /confirm availability, pricing, fulfilment details and acceptance/i.test(orderBuilder.preparedMessage) && /requested total may require confirmation/i.test(orderBuilder.preparedMessage) && /No payment has been made/i.test(orderBuilder.preparedMessage) && /No stock is reserved/i.test(orderBuilder.preparedMessage) && /does not prove the message was sent or received/i.test(orderBuilder.preparedMessage) && !orderBuilder.prohibitedClaims, 'Prepared message requests confirmation, states the request and payment limits, and makes no completion claim');
+assert(orderBuilder.copiedResult === orderBuilder.preparedMessage && orderBuilder.copiedMessage === orderBuilder.preparedMessage, 'Clipboard copy uses exactly the same message as WhatsApp');
+assert(orderBuilder.fallbackCopyResult === orderBuilder.preparedMessage && orderBuilder.fallbackText === orderBuilder.preparedMessage && !orderBuilder.failedCopyResult && /could not be copied automatically/i.test(orderBuilder.failedCopyMessage), 'Clipboard denial uses a safe exact-message fallback and reports complete copy failure clearly');
+assert(orderBuilder.openedUrl === orderBuilder.preparedUrl && orderBuilder.openCalls.length === 1 && orderBuilder.openCalls[0].url === orderBuilder.preparedUrl && orderBuilder.openCalls[0].target === '_blank' && orderBuilder.openedOpener === null, 'A valid request opens exactly one wa.me context and immediately severs its opener');
+assert(orderBuilder.openUiMessage === 'WhatsApp opened with your prepared order request. Review it before sending.', 'WhatsApp action reports only that the prepared request was opened for review');
+assert(orderBuilder.safePreview && orderBuilder.safePreviewText.includes('<img src=x onerror=alert(1)>') && orderBuilder.safePreviewText.includes('<script>alert(1)</script>') && !orderBuilder.unsafePreviewNodes, 'HTML-like order input remains harmless visible text in preview');
+assert(!orderBuilder.cancelledReset && orderBuilder.cancelledResetPreserved && orderBuilder.confirmedReset, 'WhatsApp Order Builder reset requires confirmation and preserves data when cancelled');
+assert(orderBuilder.resetState.businessName === '' && orderBuilder.resetState.destinationNumber === '' && orderBuilder.resetState.customerName === '' && orderBuilder.resetState.rowCount === 1 && orderBuilder.resetState.description === '' && orderBuilder.resetState.quantity === '1' && orderBuilder.resetState.collectionChecked && orderBuilder.resetState.deliveryHidden && orderBuilder.resetState.deliveryAddressDisabled && orderBuilder.resetState.deliveryFeeDisabled && orderBuilder.resetState.deliveryFee === '0.00' && orderBuilder.resetState.previewHidden && orderBuilder.resetState.focused === 'business-name' && orderBuilder.resetState.hasOrderDate && orderBuilder.resetState.hasRequestedDate && /^ORD-\d{4}-001$/.test(orderBuilder.resetState.number), 'Confirmed Order Builder reset restores one blank item, request defaults, empty preview and first-field focus');
+
 await send('Page.close').catch(() => {});
 socket.close();
 
-console.log(JSON.stringify({ checks: checks.length, failures, invoice, quote, jobCard }, null, 2));
+console.log(JSON.stringify({ checks: checks.length, failures, invoice, quote, jobCard, orderBuilder }, null, 2));
 if (failures.length) process.exitCode = 1;
