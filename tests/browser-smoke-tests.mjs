@@ -20,7 +20,8 @@ const pages = [
   'contact.html',
   'payments.html',
   'assets/invoice_generator.html',
-  'assets/quote_generator.html'
+  'assets/quote_generator.html',
+  'assets/job_card_generator.html'
 ];
 
 const failures = [];
@@ -223,6 +224,15 @@ const quoteReducedMotion = await evaluate(`(() => {
 assert(quoteReducedMotion, 'Quote Generator respects reduced-motion preferences');
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
 
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await navigate('assets/job_card_generator.html');
+const jobCardReducedMotion = await evaluate(`(() => {
+  const style = getComputedStyle(document.querySelector('.button'));
+  return getComputedStyle(document.documentElement).scrollBehavior === 'auto' && parseFloat(style.transitionDuration) <= 0.001;
+})()`);
+assert(jobCardReducedMotion, 'Job Card Generator respects reduced-motion preferences');
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
+
 await navigate('index.html');
 const homepage = await evaluate(`(() => ({
   text: document.body.innerText,
@@ -245,6 +255,8 @@ const workContent = await evaluate(`(() => {
     recent,
     badges,
     software: [...document.querySelectorAll('.software-automation .recent-project-card h3')].map((heading) => heading.textContent.trim()),
+    jobCardLink: document.querySelector('a[href="assets/job_card_generator.html"]')?.textContent.trim(),
+    jobCardImage: document.querySelector('img[src="assets/images/projects/job-card-generator.webp"]')?.getAttribute('alt'),
     wonderAlt: document.querySelector('img[src$="wondercubs-studio.webp"]').alt,
     text: document.body.innerText,
     externalLinksValid: [...document.querySelectorAll('a[href^="http"]')].every((link) => link.target === '_blank' && link.relList.contains('noopener') && link.relList.contains('noreferrer'))
@@ -252,7 +264,8 @@ const workContent = await evaluate(`(() => {
 })()`);
 assert(workContent.featured.join('|') === 'Generative A.I — Industrial Automation|Sticky Notes Capstone|WonderCubs Studio — In Development', 'Featured Work uses the specified order and status');
 assert(workContent.recent.join('|') === 'SNA Cleaning Services|AJ Air Systems|Lee’s Nail It Salon|Ultimate Liquors|Cay Accessories|D’vine Funeral Home|Valentine’s Cards', 'Recent Projects uses the specified seven-project order');
-assert(workContent.software.join('|') === 'Invoice Generator|Quote Generator', 'Software & Automation contains Invoice Generator followed by Quote Generator');
+assert(workContent.software.join('|') === 'Invoice Generator|Quote Generator|Job Card Generator', 'Software & Automation contains Invoice Generator, Quote Generator and Job Card Generator in order');
+assert(workContent.jobCardLink === 'Open Live Tool ↗' && /Job Card Generator/.test(workContent.jobCardImage), 'Job Card Work card uses the correct local tool link and meaningful screenshot alt text');
 assert(workContent.wonderAlt === 'WonderCubs Studio application architecture diagram', 'WonderCubs architecture image has accurate alt text');
 assert(!/AI agents|working AI|InterSacks Office Automation|Excel Report Generator|PDF-to-Excel Extractor|Folder Auto Backup|Bulk File Renamer/i.test(workContent.text), 'Work page removes overstated AI and planned Python automation claims');
 assert(!workContent.badges.some((badge) => /Website|Interactive Design|Funeral Services|E-commerce/i.test(badge)), 'Work technology badges contain no project-type or industry labels');
@@ -827,8 +840,345 @@ assert(!quote.missingLibraryDownload && /could not be loaded/i.test(quote.missin
 assert(!quote.cancelledReset && quote.cancelledResetPreserved && quote.confirmedReset, 'Quote reset requires confirmation and preserves data when cancelled');
 assert(quote.resetState.rowCount === 1 && quote.resetState.description === '' && !quote.resetState.taxEnabled && quote.resetState.taxRateDisabled && quote.resetState.discountType === 'none' && quote.resetState.previewHidden && quote.resetState.businessName === '' && quote.resetState.focused === 'business-name' && quote.resetState.hasIssueDate && quote.resetState.hasValidUntil, 'Confirmed Quote reset restores one blank item, defaults, empty preview and first-field focus');
 
+await navigate('assets/job_card_generator.html');
+await waitFor('Boolean(window.jobCardGenerator)');
+await waitFor('Boolean(window.jspdf && window.jspdf.jsPDF)', 30000);
+const jobCard = await evaluate(`(async () => {
+  const api = window.jobCardGenerator;
+  const form = document.querySelector('#job-card-form');
+  const setValue = (selector, value, root = document) => {
+    const control = root.querySelector(selector);
+    control.value = value;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return control;
+  };
+  const setChecked = (selector, checked) => {
+    const control = document.querySelector(selector);
+    control.checked = checked;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return control;
+  };
+  const rows = () => [...document.querySelectorAll('.material-row')];
+  const resetRows = () => {
+    rows().slice(1).forEach((row) => row.remove());
+    const row = rows()[0] || api.addMaterial();
+    setValue('.material-description', 'Replacement filter', row);
+    setValue('.material-quantity', '1', row);
+    setValue('.material-reference', 'RF-100', row);
+    setValue('.material-notes', 'Installed during service', row);
+    return row;
+  };
+  const completeDetails = () => {
+    setValue('#business-name', 'InterSacks Test Service');
+    setValue('#technician-name', 'Jordan Daniels');
+    setValue('#business-phone', '021 000 0000');
+    setValue('#business-email', 'service@example.com');
+    setValue('#business-address', '1 Sample Street, Paarl');
+    setValue('#customer-name', 'Sample Customer');
+    setValue('#contact-person', 'Sam Jacobs');
+    setValue('#customer-phone', '082 000 0000');
+    setValue('#customer-email', 'customer@example.com');
+    setValue('#service-address', '2 Example Road, Paarl');
+    setValue('#job-card-number', 'JC-2026-001');
+    setValue('#job-status', 'In Progress');
+    setValue('#job-priority', 'Normal');
+    setValue('#date-opened', '2026-08-23');
+    setValue('#scheduled-date', '2026-08-24');
+    setValue('#completion-date', '2026-08-24');
+    setValue('#arrival-time', '08:15');
+    setValue('#departure-time', '10:45');
+    setValue('#equipment-type', 'Office air-conditioning unit');
+    setValue('#equipment-make', 'CoolAir');
+    setValue('#equipment-model', 'CX-240');
+    setValue('#serial-number', 'SAFE-001');
+    setValue('#equipment-location', 'Reception office');
+    setValue('#reported-problem', 'Unit runs but does not cool the reception area.');
+    setValue('#inspection-findings', 'A blocked filter and loose thermostat connection were identified.');
+    setValue('#work-performed', 'Cleaned the filter, secured the connection and tested the cooling cycle.');
+    setValue('#recommendations', 'Inspect and clean the filter every three months.');
+    setChecked('#area-clean', true);
+    setChecked('#equipment-tested', true);
+    setChecked('#customer-informed', true);
+    setChecked('#follow-up-required', false);
+    setValue('#acknowledgement-name', 'Sam Jacobs');
+    setValue('#acknowledgement-date', '2026-08-24');
+    setChecked('#work-explained', true);
+    resetRows();
+  };
+
+  const initialState = {
+    rowCount: rows().length,
+    removeHidden: rows()[0].querySelector('.remove-button').hidden,
+    number: document.querySelector('#job-card-number').value,
+    status: document.querySelector('#job-status').value,
+    priority: document.querySelector('#job-priority').value,
+    duration: document.querySelector('#service-duration').value,
+    privacyNotice: document.body.innerText.includes('Your job card information stays in this browser session and is not uploaded by InterSacks Digital.'),
+    acknowledgementNotice: document.body.innerText.includes('not presented as a legally verified digital signature'),
+    hasBillingLanguage: /invoice|quotation|price|total|tax|payment|deposit/i.test(document.body.innerText),
+    minimumTargetHeight: Math.min(...[...document.querySelectorAll('button, a, input:not([type="checkbox"]), select, textarea, .check-field label')]
+      .filter((control) => control.getClientRects().length)
+      .map((control) => control.getBoundingClientRect().height))
+  };
+
+  document.querySelector('#add-material-button').click();
+  const addedRowCount = rows().length;
+  const secondRemoveVisible = !rows()[1].querySelector('.remove-button').hidden;
+  rows()[1].querySelector('.remove-button').click();
+  const removedRowCount = rows().length;
+  const retainedRemoveHidden = rows()[0].querySelector('.remove-button').hidden;
+
+  completeDetails();
+  const calculatedDuration = document.querySelector('#service-duration').value;
+  let reportValidityCalls = 0;
+  const originalReportValidity = form.reportValidity.bind(form);
+  form.reportValidity = () => { reportValidityCalls += 1; return originalReportValidity(); };
+
+  setValue('#job-status', 'Completed');
+  setValue('#work-performed', '');
+  const completedWithoutWorkValid = api.validateForm();
+  const completedWithoutWorkFocused = document.activeElement.id;
+  setValue('#work-performed', 'Completed the requested service and tested the unit.');
+  setValue('#acknowledgement-name', '');
+  const completedWithoutAcknowledgementValid = api.validateForm();
+  setValue('#acknowledgement-name', 'Sam Jacobs');
+  setValue('#acknowledgement-date', '');
+  const completedWithoutAcknowledgementDateValid = api.validateForm();
+  setValue('#acknowledgement-date', '2026-08-24');
+  setChecked('#work-explained', false);
+  const completedWithoutExplanationValid = api.validateForm();
+  setChecked('#work-explained', true);
+  const completedValid = api.validateForm();
+
+  setValue('#job-status', 'In Progress');
+  setChecked('#follow-up-required', true);
+  const followUpShown = !document.querySelector('#follow-up-field').hidden && !document.querySelector('#follow-up-details').disabled && document.querySelector('#follow-up-details').required;
+  setValue('#follow-up-details', '');
+  const followUpWithoutDetailsValid = api.validateForm();
+  setValue('#follow-up-details', 'Return after the replacement controller arrives.');
+  const followUpWithDetailsValid = api.validateForm();
+  setChecked('#follow-up-required', false);
+
+  setValue('#completion-date', '2026-08-22');
+  const invalidDateValid = api.validateForm();
+  setValue('#completion-date', '2026-08-24');
+  setValue('#arrival-time', '10:45');
+  setValue('#departure-time', '08:15');
+  const invalidTimeValid = api.validateForm();
+  setValue('#arrival-time', '08:15');
+  setValue('#departure-time', '10:45');
+
+  const JsPdf = window.jspdf.jsPDF;
+  const originalLibrary = window.jspdf;
+  let invalidConstructions = 0;
+  let invalidSaves = 0;
+  window.jspdf = {
+    jsPDF: function WrappedJobCardJsPdf(...args) {
+      invalidConstructions += 1;
+      const doc = new JsPdf(...args);
+      doc.save = () => { invalidSaves += 1; };
+      return doc;
+    }
+  };
+  let row = resetRows();
+  setValue('.material-quantity', '0', row);
+  const zeroQuantityValid = api.validateForm();
+  const zeroQuantityDownload = api.downloadPdf();
+  row = resetRows();
+  setValue('.material-quantity', '-1', row);
+  const negativeQuantityValid = api.validateForm();
+  const negativeQuantityDownload = api.downloadPdf();
+  row = resetRows();
+  setValue('.material-quantity', 'not-a-number', row);
+  const nonNumericQuantityValid = api.validateForm();
+  const nonNumericQuantityDownload = api.downloadPdf();
+  row = resetRows();
+  setValue('.material-quantity', '1000001', row);
+  const excessiveQuantityValid = api.validateForm();
+  const excessiveQuantityDownload = api.downloadPdf();
+  row = resetRows();
+  setValue('.material-description', '', row);
+  const blankMaterialValid = api.validateForm();
+  const blankMaterialDownload = api.downloadPdf();
+  window.jspdf = originalLibrary;
+
+  completeDetails();
+  setValue('#internal-notes', 'PRIVATE INTERNAL SERVICE NOTE');
+  setChecked('#include-internal-notes', false);
+  const defaultPreviewed = api.previewJobCard();
+  const defaultData = api.collectJobData();
+  const defaultPdf = api.buildPdf(defaultData);
+  const defaultPdfText = defaultPdf.internal.pages.flat(2).join(' ');
+  const defaultPreviewText = document.querySelector('#preview-document').textContent;
+  setChecked('#include-internal-notes', true);
+  const enabledPreviewed = api.previewJobCard();
+  const enabledData = api.collectJobData();
+  const enabledPdf = api.buildPdf(enabledData);
+  const enabledPdfText = enabledPdf.internal.pages.flat(2).join(' ');
+  const enabledPreviewText = document.querySelector('#preview-document').textContent;
+
+  setValue('#reported-problem', '<img src=x onerror=alert(1)>');
+  setValue('.material-description', '<script>alert(1)<\\/script>', rows()[0]);
+  const safePreview = api.previewJobCard();
+  const safePreviewText = document.querySelector('#preview-document').textContent;
+  const unsafePreviewNodes = document.querySelector('#preview-document img, #preview-document script, #preview-document iframe');
+
+  setValue('#reported-problem', 'Unit runs but does not cool the reception area.');
+  setValue('.material-description', 'Replacement filter', rows()[0]);
+  setChecked('#include-internal-notes', false);
+  const matchingPreview = api.previewJobCard();
+  const matchingData = api.collectJobData();
+  const matchingPdf = api.buildPdf(matchingData);
+  const matchingPdfText = matchingPdf.internal.pages.flat(2).join(' ');
+  const matchingPreviewText = document.querySelector('#preview-document').textContent;
+
+  setValue('#job-card-number', 'JC 2026/001');
+  let savedName = '';
+  window.jspdf = {
+    jsPDF: function InterceptedJobCardJsPdf(...args) {
+      const doc = new JsPdf(...args);
+      doc.save = (name) => { savedName = name; };
+      return doc;
+    }
+  };
+  const validDownload = api.downloadPdf();
+  window.jspdf = originalLibrary;
+
+  completeDetails();
+  rows().forEach((materialRow) => materialRow.remove());
+  setValue('#inspection-findings', 'Detailed inspection findings for pagination testing. '.repeat(35));
+  setValue('#recommendations', 'Detailed recommendation for pagination testing. '.repeat(35));
+  for (let index = 0; index < 45; index += 1) {
+    api.addMaterial({
+      description: 'Long material description for reliable multi-page PDF testing '.repeat(6) + index,
+      quantity: 1,
+      reference: 'PART-' + index,
+      notes: 'Fitted and checked during the service visit.'
+    });
+  }
+  const longData = api.collectJobData();
+  const longPdf = api.buildPdf(longData);
+  const pageCount = longPdf.getNumberOfPages();
+  const longPdfText = longPdf.internal.pages.flat(2).join(' ');
+
+  const savedLibrary = window.jspdf;
+  delete window.jspdf;
+  const missingLibraryDownload = api.downloadPdf();
+  const missingLibraryUiMessage = document.querySelector('#form-message').textContent;
+  let missingLibraryMessage = '';
+  try { api.buildPdf(longData); } catch (error) { missingLibraryMessage = error.message; }
+  window.jspdf = savedLibrary;
+
+  setValue('#business-name', 'Keep this value');
+  const originalConfirm = window.confirm;
+  window.confirm = () => false;
+  const cancelledReset = api.resetJobCard();
+  const cancelledResetPreserved = document.querySelector('#business-name').value === 'Keep this value';
+  window.confirm = () => true;
+  const confirmedReset = api.resetJobCard();
+  const resetState = {
+    rowCount: rows().length,
+    description: rows()[0].querySelector('.material-description').value,
+    status: document.querySelector('#job-status').value,
+    priority: document.querySelector('#job-priority').value,
+    followUp: document.querySelector('#follow-up-required').checked,
+    followUpHidden: document.querySelector('#follow-up-field').hidden,
+    includeInternalNotes: document.querySelector('#include-internal-notes').checked,
+    previewHidden: document.querySelector('#preview-document').hidden,
+    businessName: document.querySelector('#business-name').value,
+    focused: document.activeElement.id,
+    hasOpenedDate: Boolean(document.querySelector('#date-opened').value),
+    number: document.querySelector('#job-card-number').value
+  };
+  window.confirm = originalConfirm;
+
+  return {
+    initialState,
+    addedRowCount,
+    secondRemoveVisible,
+    removedRowCount,
+    retainedRemoveHidden,
+    calculatedDuration,
+    reportValidityCalls,
+    completedWithoutWorkValid,
+    completedWithoutWorkFocused,
+    completedWithoutAcknowledgementValid,
+    completedWithoutAcknowledgementDateValid,
+    completedWithoutExplanationValid,
+    completedValid,
+    followUpShown,
+    followUpWithoutDetailsValid,
+    followUpWithDetailsValid,
+    invalidDateValid,
+    invalidTimeValid,
+    zeroQuantityValid,
+    zeroQuantityDownload,
+    negativeQuantityValid,
+    negativeQuantityDownload,
+    nonNumericQuantityValid,
+    nonNumericQuantityDownload,
+    excessiveQuantityValid,
+    excessiveQuantityDownload,
+    blankMaterialValid,
+    blankMaterialDownload,
+    rejectsInfinity: api.parseMaterialQuantity(Infinity) === null && api.parseMaterialQuantity(-Infinity) === null,
+    invalidConstructions,
+    invalidSaves,
+    defaultPreviewed,
+    defaultPreviewHasInternal: defaultPreviewText.includes('PRIVATE INTERNAL SERVICE NOTE'),
+    defaultPdfHasInternal: defaultPdfText.includes('PRIVATE INTERNAL SERVICE NOTE'),
+    enabledPreviewed,
+    enabledPreviewHasInternal: enabledPreviewText.includes('PRIVATE INTERNAL SERVICE NOTE'),
+    enabledPdfHasInternal: enabledPdfText.includes('PRIVATE INTERNAL SERVICE NOTE'),
+    safePreview,
+    safePreviewText,
+    unsafePreviewNodes: Boolean(unsafePreviewNodes),
+    matchingPreview,
+    matchingPreviewHasDetails: matchingPreviewText.includes('JC-2026-001') && matchingPreviewText.includes('In Progress') && matchingPreviewText.includes('Unit runs but does not cool the reception area.') && matchingPreviewText.includes('2 hours 30 minutes') && matchingPreviewText.includes('Replacement filter'),
+    matchingPdfHasDetails: matchingPdfText.includes('JC-2026-001') && matchingPdfText.includes('STATUS IN PROGRESS') && matchingPdfText.includes('Unit runs but does not cool the reception area.') && matchingPdfText.includes('2 hours 30 minutes') && matchingPdfText.includes('Replacement filter'),
+    matchingPdfBytes: matchingPdf.output('arraybuffer').byteLength,
+    validDownload,
+    savedName,
+    pageCount,
+    repeatedHeadings: (longPdfText.match(/DESCRIPTION/g) || []).length,
+    hasPageNumbers: longPdfText.includes('Page 1 of'),
+    missingLibraryDownload,
+    missingLibraryUiMessage,
+    missingLibraryMessage,
+    cancelledReset,
+    cancelledResetPreserved,
+    confirmedReset,
+    resetState
+  };
+})()`);
+
+assert(jobCard.initialState.rowCount === 1 && jobCard.initialState.removeHidden && /^JC-\d{4}-001$/.test(jobCard.initialState.number) && jobCard.initialState.status === 'Open' && jobCard.initialState.priority === 'Normal' && jobCard.initialState.duration === 'Not calculated', 'Job Card Generator starts with one retained material row, generated editable number and service defaults');
+assert(jobCard.initialState.privacyNotice && jobCard.initialState.acknowledgementNotice && !jobCard.initialState.hasBillingLanguage, 'Job Card Generator states session-only privacy and acknowledgement limits without billing language');
+assert(jobCard.initialState.minimumTargetHeight >= 44, 'Job Card Generator interactive targets are at least 44px high');
+assert(jobCard.addedRowCount === 2 && jobCard.secondRemoveVisible && jobCard.removedRowCount === 1 && jobCard.retainedRemoveHidden, 'Job Card Generator adds and removes material rows while retaining one blank-capable row');
+assert(jobCard.calculatedDuration === '2 hours 30 minutes', 'Job Card Generator calculates 08:15 to 10:45 as 2 hours 30 minutes');
+assert(!jobCard.completedWithoutWorkValid && jobCard.completedWithoutWorkFocused === 'work-performed' && jobCard.completedValid, 'Completed Job Cards require work-performed details and focus the missing field');
+assert(!jobCard.completedWithoutAcknowledgementValid && !jobCard.completedWithoutAcknowledgementDateValid && !jobCard.completedWithoutExplanationValid, 'Completed Job Cards require the representative name, acknowledgement date and explanation confirmation');
+assert(jobCard.followUpShown && !jobCard.followUpWithoutDetailsValid && jobCard.followUpWithDetailsValid, 'Follow-up selection reveals and requires an explanation');
+assert(!jobCard.invalidDateValid && !jobCard.invalidTimeValid, 'Job Card Generator rejects completion dates and departure times earlier than their starting values');
+assert(!jobCard.zeroQuantityValid && !jobCard.zeroQuantityDownload && !jobCard.negativeQuantityValid && !jobCard.negativeQuantityDownload && !jobCard.nonNumericQuantityValid && !jobCard.nonNumericQuantityDownload && !jobCard.excessiveQuantityValid && !jobCard.excessiveQuantityDownload && jobCard.rejectsInfinity, 'Job Card Generator rejects zero, negative, non-numeric, non-finite and excessive material quantities');
+assert(!jobCard.blankMaterialValid && !jobCard.blankMaterialDownload, 'Job Card Generator rejects an active material row without a description');
+assert(jobCard.invalidConstructions === 0 && jobCard.invalidSaves === 0, 'Invalid Job Cards construct and save zero PDFs');
+assert(jobCard.reportValidityCalls > 0, 'Job Card preview, validation and download actions call reportValidity');
+assert(jobCard.defaultPreviewed && !jobCard.defaultPreviewHasInternal && !jobCard.defaultPdfHasInternal, 'Internal Job Card notes are excluded from the preview and PDF by default');
+assert(jobCard.enabledPreviewed && jobCard.enabledPreviewHasInternal && jobCard.enabledPdfHasInternal, 'Internal Job Card notes appear in the preview and PDF only when explicitly enabled');
+assert(jobCard.safePreview && jobCard.safePreviewText.includes('<img src=x onerror=alert(1)>') && jobCard.safePreviewText.includes('<script>alert(1)</script>') && !jobCard.unsafePreviewNodes, 'HTML-like Job Card input remains harmless visible text in preview');
+assert(jobCard.matchingPreview && jobCard.matchingPreviewHasDetails && jobCard.matchingPdfHasDetails && jobCard.matchingPdfBytes > 0, 'Job Card form, preview and PDF contain matching job, service-duration and material details');
+assert(jobCard.validDownload && jobCard.savedName === 'job-card-JC-2026-001.pdf', 'Valid Job Card download uses a sanitized PDF filename');
+assert(jobCard.pageCount > 1 && jobCard.repeatedHeadings > 1 && jobCard.hasPageNumbers, 'Forty-five long material rows produce a numbered multi-page Job Card PDF with repeated headings');
+assert(!jobCard.missingLibraryDownload && /could not be loaded/i.test(jobCard.missingLibraryUiMessage) && /could not be loaded/i.test(jobCard.missingLibraryMessage), 'Missing jsPDF is handled with a clear Job Card message and no uncaught exception');
+assert(!jobCard.cancelledReset && jobCard.cancelledResetPreserved && jobCard.confirmedReset, 'Job Card reset requires confirmation and preserves data when cancelled');
+assert(jobCard.resetState.rowCount === 1 && jobCard.resetState.description === '' && jobCard.resetState.status === 'Open' && jobCard.resetState.priority === 'Normal' && !jobCard.resetState.followUp && jobCard.resetState.followUpHidden && !jobCard.resetState.includeInternalNotes && jobCard.resetState.previewHidden && jobCard.resetState.businessName === '' && jobCard.resetState.focused === 'business-name' && jobCard.resetState.hasOpenedDate && /^JC-\d{4}-001$/.test(jobCard.resetState.number), 'Confirmed Job Card reset restores one blank material row, defaults, empty preview and first-field focus');
+
 await send('Page.close').catch(() => {});
 socket.close();
 
-console.log(JSON.stringify({ checks: checks.length, failures, invoice, quote }, null, 2));
+console.log(JSON.stringify({ checks: checks.length, failures, invoice, quote, jobCard }, null, 2));
 if (failures.length) process.exitCode = 1;
