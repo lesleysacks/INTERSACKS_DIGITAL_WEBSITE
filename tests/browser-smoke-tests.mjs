@@ -19,7 +19,8 @@ const pages = [
   'process.html',
   'contact.html',
   'payments.html',
-  'assets/invoice_generator.html'
+  'assets/invoice_generator.html',
+  'assets/quote_generator.html'
 ];
 
 const failures = [];
@@ -140,7 +141,7 @@ for (const width of widths) {
     assert(pageErrors.length === 0, `${page} has no browser exceptions at ${width}px`);
     assert(failedResponses.length === 0, `${page} has no failed local asset responses at ${width}px`);
 
-    if (page !== 'assets/invoice_generator.html' && width <= 768) {
+    if (!page.startsWith('assets/') && width <= 768) {
       const menu = await evaluate(`(() => {
         const toggle = document.querySelector('.menu-toggle');
         toggle.click();
@@ -213,6 +214,15 @@ const reducedMotion = await evaluate(`(() => {
 assert(reducedMotion, 'Reduced-motion mode keeps reveal content visible without motion');
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
 
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await navigate('assets/quote_generator.html');
+const quoteReducedMotion = await evaluate(`(() => {
+  const style = getComputedStyle(document.querySelector('.button'));
+  return getComputedStyle(document.documentElement).scrollBehavior === 'auto' && parseFloat(style.transitionDuration) <= 0.001;
+})()`);
+assert(quoteReducedMotion, 'Quote Generator respects reduced-motion preferences');
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
+
 await navigate('index.html');
 const homepage = await evaluate(`(() => ({
   text: document.body.innerText,
@@ -242,11 +252,29 @@ const workContent = await evaluate(`(() => {
 })()`);
 assert(workContent.featured.join('|') === 'Generative A.I — Industrial Automation|Sticky Notes Capstone|WonderCubs Studio — In Development', 'Featured Work uses the specified order and status');
 assert(workContent.recent.join('|') === 'SNA Cleaning Services|AJ Air Systems|Lee’s Nail It Salon|Ultimate Liquors|Cay Accessories|D’vine Funeral Home|Valentine’s Cards', 'Recent Projects uses the specified seven-project order');
-assert(workContent.software.join('|') === 'Invoice Generator', 'Software & Automation contains only Invoice Generator');
+assert(workContent.software.join('|') === 'Invoice Generator|Quote Generator', 'Software & Automation contains Invoice Generator followed by Quote Generator');
 assert(workContent.wonderAlt === 'WonderCubs Studio application architecture diagram', 'WonderCubs architecture image has accurate alt text');
 assert(!/AI agents|working AI|InterSacks Office Automation|Excel Report Generator|PDF-to-Excel Extractor|Folder Auto Backup|Bulk File Renamer/i.test(workContent.text), 'Work page removes overstated AI and planned Python automation claims');
 assert(!workContent.badges.some((badge) => /Website|Interactive Design|Funeral Services|E-commerce/i.test(badge)), 'Work technology badges contain no project-type or industry labels');
 assert(workContent.externalLinksValid, 'All Work external links use new tabs with noopener and noreferrer');
+
+await navigate('about.html');
+await evaluate(`(async () => {
+  const image = document.querySelector('.founder-photo img');
+  image.scrollIntoView({ block: 'center' });
+  if (!image.complete) {
+    await new Promise((resolve) => {
+      image.addEventListener('load', resolve, { once: true });
+      image.addEventListener('error', resolve, { once: true });
+    });
+  }
+  window.scrollTo(0, 0);
+})()`);
+const founderPortrait = await evaluate(`(() => {
+  const image = document.querySelector('.founder-photo img');
+  return Boolean(image && image.complete && image.naturalWidth > 0 && /Lesley Sacks/.test(image.alt));
+})()`);
+assert(founderPortrait, 'Founder portrait continues to load with meaningful alt text');
 
 await navigate('payments.html');
 const payment = await evaluate(`(() => ({
@@ -435,8 +463,372 @@ assert(invoice.safePreview && !invoice.unsafePreviewNodes, 'HTML-like invoice in
 assert(invoice.pageCount > 1, 'Long descriptions and 45 items create multiple PDF pages');
 assert(/could not be loaded/i.test(invoice.missingLibraryMessage), 'Missing jsPDF produces the expected user-facing error');
 
+await navigate('assets/quote_generator.html');
+await waitFor('Boolean(window.quoteGenerator)');
+await waitFor('Boolean(window.jspdf && window.jspdf.jsPDF)', 30000);
+const quote = await evaluate(`(async () => {
+  const api = window.quoteGenerator;
+  const form = document.querySelector('#quote-form');
+  const setValue = (selector, value, root = document) => {
+    const control = root.querySelector(selector);
+    control.value = value;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return control;
+  };
+  const setChecked = (selector, checked) => {
+    const control = document.querySelector(selector);
+    control.checked = checked;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+    control.dispatchEvent(new Event('change', { bubbles: true }));
+    return control;
+  };
+  const rows = () => [...document.querySelectorAll('.item-row')];
+  const resetRows = () => {
+    rows().slice(1).forEach((row) => row.remove());
+    const row = rows()[0] || api.addItem();
+    setValue('.item-description', 'Consulting service', row);
+    setValue('.item-quantity', '1', row);
+    setValue('.item-rate', '1', row);
+    api.calculateTotals();
+    return row;
+  };
+  const setDiscount = (type, amount = '') => {
+    setValue('#discount-type', type);
+    if (type !== 'none') setValue('#discount-value', amount);
+  };
+  const completeDetails = () => {
+    setValue('#business-name', 'InterSacks Test Studio');
+    setValue('#business-email', 'studio@example.com');
+    setValue('#business-phone', '021 000 0000');
+    setValue('#business-address', '1 Sample Street, Paarl');
+    setValue('#customer-name', 'Sample Customer');
+    setValue('#customer-company', 'Example Trading');
+    setValue('#customer-email', 'customer@example.com');
+    setValue('#customer-phone', '082 000 0000');
+    setValue('#customer-address', '2 Example Road, Cape Town');
+    setValue('#quote-number', 'Q-2026-001');
+    setValue('#issue-date', '2026-08-23');
+    setValue('#valid-until', '2026-09-06');
+    setValue('#quote-notes', 'Scope is based on the supplied project information.');
+    setValue('#quote-terms', 'Timelines and payment milestones can be confirmed in writing.');
+    setValue('#acceptance-instructions', 'Reply in writing to confirm acceptance.');
+  };
+
+  const initialState = {
+    rowCount: rows().length,
+    removeHidden: rows()[0].querySelector('.remove-button').hidden,
+    taxEnabled: document.querySelector('#tax-enabled').checked,
+    taxRateDisabled: document.querySelector('#tax-rate').disabled,
+    discountType: document.querySelector('#discount-type').value,
+    quoteNumber: document.querySelector('#quote-number').value,
+    privacyNotice: document.body.innerText.includes('Your quote information stays in this browser session and is not uploaded by InterSacks Digital.'),
+    taxNotice: document.body.innerText.includes('responsible for entering the correct tax information'),
+    minimumTargetHeight: Math.min(...[...document.querySelectorAll('button, a, input:not([type="checkbox"]), select, textarea, .check-field label')]
+      .filter((control) => control.getClientRects().length)
+      .map((control) => control.getBoundingClientRect().height))
+  };
+
+  completeDetails();
+  let reportValidityCalls = 0;
+  const originalReportValidity = form.reportValidity.bind(form);
+  form.reportValidity = () => { reportValidityCalls += 1; return originalReportValidity(); };
+
+  let row = resetRows();
+  setValue('.item-quantity', '2.5', row);
+  setValue('.item-rate', '99.99', row);
+  const decimalTotals = api.calculateTotals();
+  const decimalPreview = api.previewQuote();
+  const decimalData = api.collectQuoteData();
+  const decimalPdf = api.buildPdf(decimalData);
+  const decimalPdfText = decimalPdf.internal.pages.flat(2).join(' ');
+  const decimalLine = {
+    amountField: row.querySelector('.item-amount').value,
+    subtotalCents: decimalTotals.subtotalCents,
+    totalCents: decimalTotals.totalCents,
+    previewed: decimalPreview,
+    previewTotal: document.querySelector('.quote-total strong')?.textContent,
+    previewFocused: document.activeElement.id === 'preview-title',
+    pdfHasLine: decimalPdfText.includes('R249.98'),
+    pdfHasTotal: decimalPdfText.includes('TOTAL  R249.98'),
+    pdfHasDetails: decimalPdfText.includes('InterSacks Test Studio') && decimalPdfText.includes('Sample Customer') && decimalPdfText.includes('Q-2026-001'),
+    pdfBytes: decimalPdf.output('arraybuffer').byteLength
+  };
+
+  api.addItem({ description: 'Decimal service two', quantity: 1.25, rate: 10.01 });
+  api.addItem({ description: 'Decimal service three', quantity: 3.5, rate: 0.10 });
+  const multipleTotals = api.calculateTotals();
+  const multiplePreview = api.previewQuote();
+
+  setDiscount('percentage', '10');
+  setChecked('#tax-enabled', false);
+  const percentageTotals = api.calculateTotals();
+  const percentagePreview = api.previewQuote();
+  const percentageData = api.collectQuoteData();
+  const percentagePdf = api.buildPdf(percentageData);
+  const percentagePdfText = percentagePdf.internal.pages.flat(2).join(' ');
+  const percentageResult = {
+    subtotalCents: percentageTotals.subtotalCents,
+    discountCents: percentageTotals.discountCents,
+    taxCents: percentageTotals.taxCents,
+    totalCents: percentageTotals.totalCents,
+    previewed: percentagePreview,
+    previewTotal: document.querySelector('.quote-total strong')?.textContent,
+    previewHasTax: Boolean(document.querySelector('.quote-tax')),
+    pdfHasDiscount: percentagePdfText.includes('DISCOUNT  -R26.28'),
+    pdfHasTotal: percentagePdfText.includes('TOTAL  R236.56')
+  };
+
+  setChecked('#tax-enabled', true);
+  setValue('#tax-rate', '15');
+  const taxedTotals = api.calculateTotals();
+  const taxedPreview = api.previewQuote();
+  const taxedData = api.collectQuoteData();
+  const taxedPdf = api.buildPdf(taxedData);
+  const taxedPdfText = taxedPdf.internal.pages.flat(2).join(' ');
+  const taxedResult = {
+    discountCents: taxedTotals.discountCents,
+    taxCents: taxedTotals.taxCents,
+    totalCents: taxedTotals.totalCents,
+    previewed: taxedPreview,
+    previewTax: document.querySelector('.quote-tax strong')?.textContent,
+    previewTotal: document.querySelector('.quote-total strong')?.textContent,
+    pdfHasTax: taxedPdfText.includes('TAX') && taxedPdfText.includes('R35.48'),
+    pdfHasTotal: taxedPdfText.includes('TOTAL  R272.04')
+  };
+
+  setChecked('#tax-enabled', false);
+  setDiscount('fixed', '12.34');
+  const fixedTotals = api.calculateTotals();
+
+  setDiscount('none');
+  row = resetRows();
+  setValue('.item-rate', '100', row);
+  setValue('#quote-number', 'Q 2026/001');
+  const JsPdf = window.jspdf.jsPDF;
+  const savedJsPdfLibrary = window.jspdf;
+  let savedName = '';
+  window.jspdf = {
+    jsPDF: function InterceptedQuoteJsPdf(...args) {
+      const doc = new JsPdf(...args);
+      doc.save = (name) => { savedName = name; };
+      return doc;
+    }
+  };
+  const validDownload = api.downloadPdf();
+  window.jspdf = savedJsPdfLibrary;
+
+  let constructions = 0;
+  let saves = 0;
+  const originalLibrary = window.jspdf;
+  window.jspdf = {
+    jsPDF: function WrappedQuoteJsPdf(...args) {
+      constructions += 1;
+      const doc = new JsPdf(...args);
+      doc.save = () => { saves += 1; };
+      return doc;
+    }
+  };
+
+  row = resetRows();
+  setValue('.item-quantity', '0', row);
+  const zeroQuantityValid = api.validateForm();
+  const zeroQuantityDownload = api.downloadPdf();
+
+  row = resetRows();
+  setValue('.item-description', '', row);
+  const blankDescriptionValid = api.validateForm();
+  const blankDescriptionDownload = api.downloadPdf();
+
+  row = resetRows();
+  setValue('.item-rate', '0', row);
+  const zeroRateValid = api.validateForm();
+  const zeroRateDownload = api.downloadPdf();
+
+  row = resetRows();
+  setValue('.item-rate', '-1', row);
+  const negativeRateValid = api.validateForm();
+  const negativeRateDownload = api.downloadPdf();
+
+  row = resetRows();
+  setValue('.item-quantity', 'not-a-number', row);
+  const nonNumericValid = api.validateForm();
+  const nonNumericDownload = api.downloadPdf();
+
+  row = resetRows();
+  setValue('#valid-until', '2026-08-22');
+  const invalidDateValid = api.validateForm();
+  const invalidDateDownload = api.downloadPdf();
+  setValue('#valid-until', '2026-09-06');
+
+  row = resetRows();
+  setDiscount('fixed', '2');
+  const excessiveDiscountValid = api.validateForm();
+  const excessiveDiscountDownload = api.downloadPdf();
+
+  setDiscount('percentage', '100');
+  const zeroTotalPreview = api.previewQuote();
+  const zeroTotalDownload = api.downloadPdf();
+  window.jspdf = originalLibrary;
+
+  row = resetRows();
+  setDiscount('none');
+  setValue('.item-description', '<img src=x onerror=alert(1)>', row);
+  setValue('.item-rate', '1', row);
+  const safePreview = api.previewQuote();
+  const unsafePreviewNodes = document.querySelector('#preview-document img, #preview-document script, #preview-document iframe');
+  const safePreviewText = document.querySelector('#preview-document').textContent.includes('<img src=x onerror=alert(1)>');
+
+  const originalOpen = window.open;
+  const openedUrls = [];
+  window.open = (url) => {
+    openedUrls.push(url);
+    return { opener: window };
+  };
+  row = resetRows();
+  setValue('.item-rate', '100', row);
+  setValue('#quote-number', 'Q-2026-014');
+  const sharedUrl = api.shareWhatsApp();
+  const decodedSummary = decodeURIComponent(sharedUrl.split('text=')[1]);
+  setValue('.item-quantity', '0', row);
+  const openedBeforeInvalidShare = openedUrls.length;
+  const invalidShare = api.shareWhatsApp();
+  const invalidShareOpened = openedUrls.length > openedBeforeInvalidShare;
+  window.open = originalOpen;
+
+  resetRows();
+  rows().forEach((itemRow) => itemRow.remove());
+  setDiscount('none');
+  setChecked('#tax-enabled', true);
+  setValue('#tax-rate', '15');
+  setValue('#quote-notes', 'Detailed quotation note for pagination testing. '.repeat(30));
+  setValue('#quote-terms', 'Neutral quotation term for pagination testing. '.repeat(40));
+  for (let index = 0; index < 45; index += 1) {
+    api.addItem({
+      description: 'Long quotation description for reliable multi-page PDF testing '.repeat(6) + index,
+      quantity: 1,
+      rate: 1.01
+    });
+  }
+  const longData = api.collectQuoteData();
+  const longPdf = api.buildPdf(longData);
+  const pageCount = longPdf.getNumberOfPages();
+  const longPdfText = longPdf.internal.pages.flat(2).join(' ');
+
+  const savedLibrary = window.jspdf;
+  delete window.jspdf;
+  const missingLibraryDownload = api.downloadPdf();
+  const missingLibraryUiMessage = document.querySelector('#form-message').textContent;
+  let missingLibraryMessage = '';
+  try { api.buildPdf(longData); } catch (error) { missingLibraryMessage = error.message; }
+  window.jspdf = savedLibrary;
+
+  setValue('#business-name', 'Keep this value');
+  const originalConfirm = window.confirm;
+  window.confirm = () => false;
+  const cancelledReset = api.resetQuote();
+  const cancelledResetPreserved = document.querySelector('#business-name').value === 'Keep this value';
+  window.confirm = () => true;
+  const confirmedReset = api.resetQuote();
+  const resetState = {
+    rowCount: rows().length,
+    description: rows()[0].querySelector('.item-description').value,
+    taxEnabled: document.querySelector('#tax-enabled').checked,
+    taxRateDisabled: document.querySelector('#tax-rate').disabled,
+    discountType: document.querySelector('#discount-type').value,
+    previewHidden: document.querySelector('#preview-document').hidden,
+    businessName: document.querySelector('#business-name').value,
+    focused: document.activeElement.id,
+    hasIssueDate: Boolean(document.querySelector('#issue-date').value),
+    hasValidUntil: Boolean(document.querySelector('#valid-until').value)
+  };
+  window.confirm = originalConfirm;
+
+  return {
+    initialState,
+    decimalLine,
+    multipleTotals,
+    multiplePreview,
+    percentageResult,
+    taxedResult,
+    fixedTotals,
+    validDownload,
+    savedName,
+    reportValidityCalls,
+    zeroQuantityValid,
+    zeroQuantityDownload,
+    blankDescriptionValid,
+    blankDescriptionDownload,
+    zeroRateValid,
+    zeroRateDownload,
+    negativeRateValid,
+    negativeRateDownload,
+    nonNumericValid,
+    nonNumericDownload,
+    rejectsInfinity: api.calculateLineCents(Infinity, 1) === null && api.calculateLineCents(1, Infinity) === null,
+    invalidDateValid,
+    invalidDateDownload,
+    excessiveDiscountValid,
+    excessiveDiscountDownload,
+    zeroTotalPreview,
+    zeroTotalDownload,
+    invalidConstructions: constructions,
+    invalidSaves: saves,
+    safePreview,
+    safePreviewText,
+    unsafePreviewNodes: Boolean(unsafePreviewNodes),
+    sharedUrl,
+    openedUrl: openedUrls[0],
+    decodedSummary,
+    invalidShare,
+    invalidShareOpened,
+    pageCount,
+    repeatedHeadings: (longPdfText.match(/DESCRIPTION/g) || []).length,
+    hasPageNumbers: longPdfText.includes('Page 1 of'),
+    missingLibraryDownload,
+    missingLibraryUiMessage,
+    missingLibraryMessage,
+    cancelledReset,
+    cancelledResetPreserved,
+    confirmedReset,
+    resetState
+  };
+})()`);
+
+assert(quote.initialState.rowCount === 1 && quote.initialState.removeHidden && !quote.initialState.taxEnabled && quote.initialState.taxRateDisabled && quote.initialState.discountType === 'none' && /^Q-\d{4}-001$/.test(quote.initialState.quoteNumber), 'Quote Generator starts with one retained item, an editable generated number, no discount and tax disabled');
+assert(quote.initialState.privacyNotice && quote.initialState.taxNotice, 'Quote Generator displays the browser-session privacy notice and responsible-tax guidance');
+assert(quote.initialState.minimumTargetHeight >= 44, 'Quote Generator interactive targets are at least 44px high');
+assert(quote.decimalLine.amountField === 'R249.98' && quote.decimalLine.subtotalCents === 24998 && quote.decimalLine.totalCents === 24998, 'Quote line displays and calculates 2.5 × 99.99 as R249.98');
+assert(quote.decimalLine.previewed && quote.decimalLine.previewTotal === 'R249.98' && quote.decimalLine.pdfHasLine && quote.decimalLine.pdfHasTotal && quote.decimalLine.pdfBytes > 0, 'Quote form, preview and PDF agree on the R249.98 decimal total');
+assert(quote.decimalLine.previewFocused, 'Successful Quote preview moves focus to the preview heading');
+assert(quote.decimalLine.pdfHasDetails, 'Quote PDF contains business, customer and quote information');
+assert(quote.multipleTotals.subtotalCents === 26284 && quote.multipleTotals.totalCents === 26284 && quote.multiplePreview, 'Several decimal quote items sum once in cents to R262.84');
+assert(quote.percentageResult.subtotalCents === 26284 && quote.percentageResult.discountCents === 2628 && quote.percentageResult.taxCents === 0 && quote.percentageResult.totalCents === 23656, 'Ten-percent discount is cent-accurate with tax disabled');
+assert(quote.percentageResult.previewed && quote.percentageResult.previewTotal === 'R236.56' && !quote.percentageResult.previewHasTax && quote.percentageResult.pdfHasDiscount && quote.percentageResult.pdfHasTotal, 'Percentage-discount form, preview and PDF totals match exactly');
+assert(quote.taxedResult.discountCents === 2628 && quote.taxedResult.taxCents === 3548 && quote.taxedResult.totalCents === 27204, 'Optional 15% tax is calculated in cents on the discounted subtotal');
+assert(quote.taxedResult.previewed && quote.taxedResult.previewTax === 'R35.48' && quote.taxedResult.previewTotal === 'R272.04' && quote.taxedResult.pdfHasTax && quote.taxedResult.pdfHasTotal, 'Tax-enabled form, preview and PDF totals match exactly');
+assert(quote.fixedTotals.discountCents === 1234 && quote.fixedTotals.totalCents === 25050, 'Fixed R12.34 discount remains cent-accurate');
+assert(quote.validDownload && quote.savedName === 'quote-Q-2026-001.pdf', 'Valid Quote download uses a sanitized PDF filename');
+assert(quote.reportValidityCalls > 0, 'Quote preview, download and share actions call reportValidity');
+assert(!quote.zeroQuantityValid && !quote.zeroQuantityDownload, 'Quote Generator rejects zero quantity and blocks its PDF');
+assert(!quote.blankDescriptionValid && !quote.blankDescriptionDownload, 'Quote Generator rejects blank line-item descriptions and blocks their PDF');
+assert(!quote.zeroRateValid && !quote.zeroRateDownload, 'Quote Generator rejects zero rates and blocks their PDF');
+assert(!quote.negativeRateValid && !quote.negativeRateDownload, 'Quote Generator rejects negative rates and blocks their PDF');
+assert(!quote.nonNumericValid && !quote.nonNumericDownload && quote.rejectsInfinity, 'Quote Generator rejects non-numeric and non-finite values');
+assert(!quote.invalidDateValid && !quote.invalidDateDownload, 'Quote Generator rejects a valid-until date before the issue date');
+assert(!quote.excessiveDiscountValid && !quote.excessiveDiscountDownload, 'Quote Generator rejects a fixed discount exceeding the subtotal');
+assert(quote.zeroTotalPreview && !quote.zeroTotalDownload, 'A zero-total Quote may be previewed but cannot generate a PDF');
+assert(quote.invalidConstructions === 0 && quote.invalidSaves === 0, 'Invalid and zero-total Quotes construct and save zero PDFs');
+assert(quote.safePreview && quote.safePreviewText && !quote.unsafePreviewNodes, 'HTML-like Quote input remains harmless visible text in preview');
+assert(/^https:\/\/wa\.me\/\?text=/.test(quote.sharedUrl) && quote.openedUrl === quote.sharedUrl && /Quotation Q-2026-014/.test(quote.decodedSummary) && /Prepared for: Sample Customer/.test(quote.decodedSummary) && /Valid until:/.test(quote.decodedSummary) && /Final total: R100\.00/.test(quote.decodedSummary) && /available separately/.test(quote.decodedSummary) && !/attached automatically/i.test(quote.decodedSummary), 'WhatsApp sharing opens an encoded minimal summary without claiming a PDF attachment');
+assert(!quote.invalidShare && !quote.invalidShareOpened, 'Invalid Quotes cannot open WhatsApp sharing');
+assert(quote.pageCount > 1 && quote.repeatedHeadings > 1 && quote.hasPageNumbers, 'Forty-five long Quote items produce a numbered multi-page PDF with repeated table headings');
+assert(!quote.missingLibraryDownload && /could not be loaded/i.test(quote.missingLibraryUiMessage) && /could not be loaded/i.test(quote.missingLibraryMessage), 'Missing jsPDF is handled with a clear Quote Generator message and no PDF');
+assert(!quote.cancelledReset && quote.cancelledResetPreserved && quote.confirmedReset, 'Quote reset requires confirmation and preserves data when cancelled');
+assert(quote.resetState.rowCount === 1 && quote.resetState.description === '' && !quote.resetState.taxEnabled && quote.resetState.taxRateDisabled && quote.resetState.discountType === 'none' && quote.resetState.previewHidden && quote.resetState.businessName === '' && quote.resetState.focused === 'business-name' && quote.resetState.hasIssueDate && quote.resetState.hasValidUntil, 'Confirmed Quote reset restores one blank item, defaults, empty preview and first-field focus');
+
 await send('Page.close').catch(() => {});
 socket.close();
 
-console.log(JSON.stringify({ checks: checks.length, failures, invoice }, null, 2));
+console.log(JSON.stringify({ checks: checks.length, failures, invoice, quote }, null, 2));
 if (failures.length) process.exitCode = 1;
