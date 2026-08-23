@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Prepare, preview, copy and open an itemized order request in WhatsApp for business confirmation.">
+  <meta name="theme-color" content="#081423">
+  <title>WhatsApp Order Builder | InterSacks Digital</title>
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <style>
+    :root {
+      --navy: #081423;
+      --navy-2: #0e1e31;
+      --gold: #c8a15a;
+      --gold-dark: #755216;
+      --gold-lite: #e5c98f;
+      --cream: #f8f8f6;
+      --ink: #14202d;
+      --muted: #68717a;
+      --line: rgba(200, 161, 90, 0.35);
+      --danger: #9c3d3d;
+      --success: #317457;
+      --whatsapp: #176f4a;
+      --focus: #947435;
+      --font: "Segoe UI", Arial, sans-serif;
+      --serif: Georgia, "Times New Roman", serif;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      min-width: 0;
+      margin: 0;
+      background: var(--navy);
+      color: var(--cream);
+      font: 15px/1.6 var(--font);
+    }
+    button, input, select, textarea { font: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    a { color: inherit; text-decoration: none; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    [hidden] { display: none !important; }
+
+    .skip-link {
+      position: fixed;
+      top: -70px;
+      left: 16px;
+      z-index: 20;
+      min-height: 44px;
+      padding: 10px 14px;
+      background: var(--gold);
+      color: var(--navy);
+      font-weight: 700;
+    }
+    .skip-link:focus { top: 16px; }
+    .tool-shell {
+      width: min(1320px, calc(100% - 56px));
+      margin: 0 auto;
+      padding: 26px 0 42px;
+    }
+    .tool-nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      gap: 10px;
+      line-height: 1;
+    }
+    .brand-mark {
+      color: var(--gold);
+      font: 600 31px/1 var(--serif);
+      letter-spacing: -3px;
+    }
+    .brand-name { font-size: 12px; font-weight: 800; letter-spacing: 2.5px; }
+    .brand-name small {
+      display: block;
+      margin-top: 5px;
+      font-size: 7px;
+      letter-spacing: 4px;
+    }
+    .back-link {
+      display: inline-flex;
+      min-height: 44px;
+      align-items: center;
+      border-bottom: 1px solid var(--gold);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+    .tool-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(240px, 440px);
+      gap: 50px;
+      align-items: end;
+      padding: 46px 0 34px;
+    }
+    .eyebrow {
+      margin: 0 0 13px;
+      color: var(--gold-lite);
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 2.4px;
+      text-transform: uppercase;
+    }
+    .eyebrow::before {
+      content: "";
+      display: inline-block;
+      width: 28px;
+      height: 1px;
+      margin: -2px 11px 0 0;
+      background: var(--gold);
+      vertical-align: middle;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 {
+      margin-bottom: 0;
+      font-size: clamp(38px, 5vw, 68px);
+      font-weight: 500;
+      line-height: 1.08;
+    }
+    h1 em { color: var(--gold); font-family: var(--serif); font-weight: 500; }
+    .tool-intro { margin: 0; color: #b7c0c7; font-size: 14px; }
+    .tool-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(0, .92fr);
+      gap: 24px;
+      align-items: start;
+    }
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      background: var(--cream);
+      color: var(--ink);
+    }
+    .form-panel { padding: 28px; }
+    fieldset {
+      min-width: 0;
+      margin: 0 0 26px;
+      padding: 0;
+      border: 0;
+      border-top: 1px solid #d0d0cb;
+    }
+    legend {
+      padding: 15px 13px 0 0;
+      color: var(--gold-dark);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.3px;
+      text-transform: uppercase;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 17px;
+    }
+    .field { min-width: 0; }
+    .field-wide { grid-column: 1 / -1; }
+    .field label, .item-labels span, .choice-label {
+      display: block;
+      margin-bottom: 6px;
+      color: #59636d;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+    }
+    input:not([type="radio"]), textarea {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      border: 1px solid #c8c9c4;
+      border-radius: 0;
+      background: #fff;
+      color: var(--ink);
+      padding: 10px 11px;
+      outline: 0;
+    }
+    input:not([type="radio"]) { min-height: 44px; }
+    textarea { min-height: 92px; resize: vertical; }
+    input:focus, textarea:focus {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px rgba(200, 161, 90, .24);
+    }
+    input:focus-visible, textarea:focus-visible {
+      outline: 3px solid var(--focus);
+      outline-offset: 2px;
+    }
+    input[readonly], input:disabled, textarea:disabled {
+      background: #ecece7;
+      color: #535d67;
+    }
+    .help-text, .privacy-notice, .boundary-notice {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .privacy-notice, .boundary-notice {
+      margin: 0 0 24px;
+      border-left: 3px solid var(--gold);
+      padding: 10px 13px;
+      background: #efefe9;
+    }
+    .boundary-notice { margin-top: 17px; }
+    .fulfilment-choices {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 17px;
+    }
+    .radio-field {
+      display: flex;
+      min-height: 44px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #c8c9c4;
+      padding: 7px 11px;
+      background: #fff;
+    }
+    .radio-field:has(input:checked) { border-color: var(--gold-dark); background: #f4eee1; }
+    .radio-field input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--gold-dark); }
+    .radio-field label { display: flex; min-height: 44px; flex: 1; align-items: center; font-weight: 700; }
+    .item-labels, .item-row {
+      display: grid;
+      grid-template-columns: minmax(145px, 1.45fr) minmax(110px, 1fr) minmax(66px, .5fr) minmax(88px, .7fr) minmax(96px, .75fr) auto;
+      gap: 8px;
+    }
+    .item-labels { align-items: end; margin-top: 17px; padding: 0 9px; }
+    .item-labels span:nth-child(n+3) { text-align: right; }
+    .item-row {
+      align-items: center;
+      margin-bottom: 9px;
+      padding: 9px;
+      background: #efefe9;
+    }
+    .item-row input[type="number"], .item-amount { text-align: right; }
+    .button, .remove-button {
+      min-height: 44px;
+      border: 0;
+      border-radius: 0;
+      cursor: pointer;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: .9px;
+      text-transform: uppercase;
+      transition: transform .2s, background .2s, color .2s;
+    }
+    .button { padding: 12px 16px; }
+    .button:hover, .remove-button:hover { transform: translateY(-2px); }
+    .button-primary { background: var(--gold); color: var(--navy); }
+    .button-secondary { border: 1px solid var(--navy); background: transparent; color: var(--navy); }
+    .button-whatsapp { background: var(--whatsapp); color: #fff; }
+    .button-reset { border: 1px solid #a8aaa5; background: transparent; color: #59636d; }
+    .remove-button { padding: 8px 10px; background: transparent; color: var(--danger); }
+    .items-footer, .form-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+    }
+    .running-total { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+    .running-total span { color: var(--muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+    .running-total output { color: var(--navy); font-size: 18px; font-weight: 800; }
+    .totals-strip {
+      display: grid;
+      gap: 8px;
+      margin-top: 17px;
+      padding: 16px;
+      background: #efefe9;
+    }
+    .total-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .total-row span { color: var(--muted); font-size: 11px; font-weight: 700; text-transform: uppercase; }
+    .total-row strong { font-size: 14px; }
+    .total-row-final { border-top: 1px solid #c8c9c4; padding-top: 9px; color: var(--gold-dark); }
+    .form-actions { padding-top: 4px; }
+    .form-message {
+      min-height: 23px;
+      margin: 13px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .form-message.is-error { border-left: 3px solid var(--danger); padding-left: 9px; color: var(--danger); }
+    .form-message.is-success { color: var(--success); }
+    .preview-panel {
+      position: sticky;
+      top: 24px;
+      padding: 28px;
+      background: #fff;
+    }
+    .preview-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 24px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #d0d0cb;
+    }
+    .preview-heading h2 { margin: 0; font-size: 26px; font-weight: 600; }
+    .preview-heading span { color: var(--gold-dark); font-size: 9px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; }
+    .preview-empty {
+      display: grid;
+      min-height: 330px;
+      place-items: center;
+      padding: 25px;
+      border: 1px dashed #c8c9c4;
+      color: var(--muted);
+      text-align: center;
+    }
+    .order-preview-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 20px;
+      align-items: start;
+      margin-bottom: 20px;
+    }
+    .order-preview-title { margin: 0; color: var(--navy); font: 600 32px/1.1 var(--serif); }
+    .order-meta { text-align: right; }
+    .order-meta p { margin: 0 0 4px; overflow-wrap: anywhere; font-size: 11px; }
+    .order-meta strong, .preview-copy h3 {
+      color: var(--gold-dark);
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .preview-parties, .preview-dates {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .preview-card { min-width: 0; padding: 13px; background: #f0f0ec; }
+    .preview-card strong { display: block; color: var(--gold-dark); font-size: 8px; text-transform: uppercase; }
+    .preview-card span { display: block; overflow-wrap: anywhere; font-size: 11px; }
+    .preview-table-wrap { max-width: 100%; margin-top: 17px; overflow-x: auto; }
+    .preview-table { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 11px; }
+    .preview-table th, .preview-table td { padding: 9px 7px; border-bottom: 1px solid #d8d8d3; text-align: left; vertical-align: top; }
+    .preview-table th { background: var(--navy); color: var(--cream); font-size: 8px; letter-spacing: .8px; text-transform: uppercase; }
+    .preview-table th:nth-child(n+3), .preview-table td:nth-child(n+3) { text-align: right; white-space: nowrap; }
+    .preview-totals { margin: 14px 0 0 auto; width: min(100%, 280px); }
+    .preview-totals p { display: flex; justify-content: space-between; gap: 20px; margin: 0 0 5px; font-size: 11px; }
+    .preview-totals .preview-total { border-top: 1px solid #c8c9c4; padding-top: 8px; color: var(--gold-dark); font-size: 13px; }
+    .preview-copy { margin-top: 17px; padding-top: 13px; border-top: 1px solid #d8d8d3; }
+    .preview-copy h3 { margin: 0 0 6px; }
+    .preview-copy p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; color: #4f5b66; font-size: 11px; }
+    .request-disclaimer { margin-top: 17px; border-left: 3px solid var(--gold); padding: 12px; background: #f0f0ec; color: #4f5b66; font-size: 10px; }
+    .message-preview {
+      max-height: 310px;
+      margin: 8px 0 0;
+      overflow: auto;
+      border: 1px solid #d8d8d3;
+      padding: 12px;
+      background: #fafaf7;
+      color: var(--ink);
+      font: 10px/1.55 Consolas, "Courier New", monospace;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+    .tool-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 30px 0 0;
+      color: #88939d;
+      font-size: 9px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 980px) {
+      .tool-layout, .tool-heading { grid-template-columns: 1fr; }
+      .tool-heading { gap: 18px; }
+      .preview-panel { position: static; }
+    }
+    @media (max-width: 680px) {
+      .tool-shell { width: min(100% - 32px, 1320px); padding-top: 18px; }
+      .tool-nav, .tool-footer { align-items: flex-start; }
+      .tool-heading { padding: 34px 0 27px; }
+      .form-panel, .preview-panel { padding: 20px; }
+      .form-grid, .fulfilment-choices, .order-preview-header, .preview-parties, .preview-dates { grid-template-columns: 1fr; }
+      .field-wide { grid-column: auto; }
+      .order-meta { text-align: left; }
+      .item-labels { display: none; }
+      .item-row { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 17px; }
+      .item-description, .item-variant { grid-column: 1 / -1; }
+      .item-amount { grid-column: 1; }
+      .remove-button { grid-column: 2; }
+      .form-actions .button { flex: 1 1 180px; }
+    }
+    @media (max-width: 390px) {
+      .tool-shell { width: min(100% - 24px, 1320px); }
+      .tool-nav, .tool-footer, .items-footer { flex-direction: column; }
+      .brand-name { font-size: 10px; }
+      .form-panel, .preview-panel { padding: 16px; }
+      .item-row { grid-template-columns: minmax(0, 1fr); }
+      .item-description, .item-variant, .item-amount, .remove-button { grid-column: 1; }
+      .running-total { margin-left: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+      .button:hover, .remove-button:hover { transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#order-form">Skip to order-request form</a>
+  <main class="tool-shell">
+    <nav class="tool-nav" aria-label="Order builder navigation">
+      <a class="brand" href="../work.html" aria-label="InterSacks Digital work page">
+        <span class="brand-mark" aria-hidden="true">iS</span>
+        <span class="brand-name">INTERSACKS <small>DIGITAL</small></span>
+      </a>
+      <a class="back-link" href="../work.html">Back to selected work ↑</a>
+    </nav>
+
+    <header class="tool-heading">
+      <div>
+        <p class="eyebrow">Working prototype</p>
+        <h1>WhatsApp Order <em>Builder.</em></h1>
+      </div>
+      <p class="tool-intro">Prepare an itemized order request, calculate its requested total and open an encoded WhatsApp message for the business to review and confirm.</p>
+    </header>
+
+    <noscript><p class="privacy-notice">JavaScript is required to calculate, preview, copy and open an order request. This page does not submit or store your information.</p></noscript>
+
+    <div class="tool-layout">
+      <section class="panel form-panel" aria-label="Order-request details">
+        <p class="privacy-notice">Order information remains in this browser session. This page does not upload or store it. Information is passed to WhatsApp only when you choose “Open WhatsApp”; WhatsApp’s terms and privacy practices then apply.</p>
+        <form id="order-form">
+          <fieldset>
+            <legend>Business settings</legend>
+            <div class="form-grid">
+              <div class="field"><label for="business-name">Business name</label><input id="business-name" name="businessName" type="text" maxlength="120" autocomplete="organization" required></div>
+              <div class="field"><label for="whatsapp-number">Destination WhatsApp number</label><input id="whatsapp-number" name="whatsappNumber" type="tel" maxlength="30" autocomplete="tel" placeholder="084 325 2262" required><p class="help-text">South African local numbers such as 084 325 2262 are converted to international format automatically.</p></div>
+              <div class="field field-wide"><label for="order-instructions">Short ordering instructions (optional)</label><textarea id="order-instructions" name="orderInstructions" maxlength="300" placeholder="Add a short instruction that should accompany the request."></textarea></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Customer and request details</legend>
+            <div class="form-grid">
+              <div class="field"><label for="customer-name">Customer name</label><input id="customer-name" name="customerName" type="text" maxlength="120" autocomplete="name" required></div>
+              <div class="field"><label for="customer-phone">Customer telephone (optional)</label><input id="customer-phone" name="customerPhone" type="tel" maxlength="40" autocomplete="tel"></div>
+              <div class="field"><label for="order-number">Order-request number</label><input id="order-number" name="orderNumber" type="text" maxlength="60" required></div>
+              <div class="field"><label for="order-date">Order date</label><input id="order-date" name="orderDate" type="date" required></div>
+              <div class="field"><label for="requested-date">Requested fulfilment date</label><input id="requested-date" name="requestedDate" type="date" required></div>
+              <div class="field"><label for="requested-time">Requested time (optional)</label><input id="requested-time" name="requestedTime" type="time"></div>
+              <div class="field field-wide"><label for="customer-notes">Customer notes (optional)</label><textarea id="customer-notes" name="customerNotes" maxlength="1000" placeholder="Add relevant preferences or request details."></textarea></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Requested fulfilment</legend>
+            <p class="help-text">The selected method is a request and remains subject to business confirmation.</p>
+            <div class="fulfilment-choices">
+              <div class="radio-field"><input id="fulfilment-collection" name="fulfilment" type="radio" value="Collection" checked><label for="fulfilment-collection">Collection</label></div>
+              <div class="radio-field"><input id="fulfilment-delivery" name="fulfilment" type="radio" value="Delivery"><label for="fulfilment-delivery">Delivery</label></div>
+            </div>
+            <div class="form-grid" id="delivery-fields" hidden>
+              <div class="field field-wide"><label for="delivery-address">Requested delivery address</label><textarea id="delivery-address" name="deliveryAddress" maxlength="300" disabled></textarea></div>
+              <div class="field"><label for="delivery-fee">Optional delivery fee (R)</label><input id="delivery-fee" name="deliveryFee" type="number" min="0" max="9999999.99" step="0.01" inputmode="decimal" value="0.00" disabled></div>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Order items</legend>
+            <div class="item-labels" aria-hidden="true"><span>Description</span><span>Variant / size</span><span>Qty</span><span>Unit price (R)</span><span>Amount (R)</span><span></span></div>
+            <div id="items-container"></div>
+            <div class="items-footer">
+              <button class="button button-secondary" id="add-item-button" type="button">+ Add item</button>
+              <div class="running-total"><span>Subtotal</span><output id="running-subtotal">R0.00</output></div>
+            </div>
+            <div class="totals-strip" aria-label="Order-request totals">
+              <div class="total-row"><span>Subtotal</span><strong><output id="subtotal-total">R0.00</output></strong></div>
+              <div class="total-row" id="delivery-total-row" hidden><span>Delivery fee</span><strong><output id="delivery-total">R0.00</output></strong></div>
+              <div class="total-row total-row-final"><span>Requested total</span><strong><output id="requested-total">R0.00</output></strong></div>
+            </div>
+          </fieldset>
+
+          <p class="boundary-notice">This tool prepares an order request only. The business must confirm availability, pricing, delivery or collection details, and acceptance. No stock is reserved and no payment is processed. Opening WhatsApp does not prove the message was sent or received.</p>
+
+          <div class="form-actions">
+            <button class="button button-secondary" id="preview-button" type="button">Preview Order Request</button>
+            <button class="button button-primary" id="copy-button" type="button">Copy Order Message</button>
+            <button class="button button-whatsapp" id="whatsapp-button" type="button">Open WhatsApp</button>
+            <button class="button button-reset" id="reset-button" type="button">Reset</button>
+          </div>
+          <p class="form-message" id="form-message" role="status" aria-live="polite"></p>
+        </form>
+      </section>
+
+      <aside class="panel preview-panel" aria-labelledby="preview-title">
+        <div class="preview-heading"><h2 id="preview-title" tabindex="-1">Order request preview</h2><span>ZAR</span></div>
+        <div class="preview-empty" id="preview-empty"><p>Complete the required details, then select “Preview Order Request” to review the request and exact WhatsApp message.</p></div>
+        <div id="preview-document" hidden></div>
+      </aside>
+    </div>
+
+    <footer class="tool-footer"><span>InterSacks Digital</span><span>Browser-based order-request prototype</span></footer>
+  </main>
+
+  <template id="item-row-template">
+    <div class="item-row">
+      <input class="item-description" type="text" maxlength="240" placeholder="Product or service" aria-label="Product or service description" required>
+      <input class="item-variant" type="text" maxlength="120" placeholder="Variant / size" aria-label="Optional variant, size, flavour or colour">
+      <input class="item-quantity" type="number" min="0.001" max="1000000" step="0.001" inputmode="decimal" value="1" placeholder="Qty" aria-label="Item quantity" required>
+      <input class="item-price" type="number" min="0.01" max="9999999.99" step="0.01" inputmode="decimal" placeholder="Price" aria-label="Unit price in rand" required>
+      <input class="item-amount" type="text" placeholder="R0.00" aria-label="Calculated line amount in rand" readonly>
+      <button class="remove-button" type="button" aria-label="Remove order item">Remove</button>
+    </div>
+  </template>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const MESSAGE_LIMIT = 4000;
+      const MAX_ITEMS = 30;
+      const MAX_QUANTITY = 1000000;
+      const MAX_PRICE_CENTS = 999999999;
+      const form = document.querySelector('#order-form');
+      const itemsContainer = document.querySelector('#items-container');
+      const itemTemplate = document.querySelector('#item-row-template');
+      const addItemButton = document.querySelector('#add-item-button');
+      const previewButton = document.querySelector('#preview-button');
+      const copyButton = document.querySelector('#copy-button');
+      const whatsappButton = document.querySelector('#whatsapp-button');
+      const resetButton = document.querySelector('#reset-button');
+      const deliveryFields = document.querySelector('#delivery-fields');
+      const deliveryAddress = document.querySelector('#delivery-address');
+      const deliveryFee = document.querySelector('#delivery-fee');
+      const deliveryTotalRow = document.querySelector('#delivery-total-row');
+      const runningSubtotal = document.querySelector('#running-subtotal');
+      const subtotalTotal = document.querySelector('#subtotal-total');
+      const deliveryTotal = document.querySelector('#delivery-total');
+      const requestedTotal = document.querySelector('#requested-total');
+      const customerNotes = document.querySelector('#customer-notes');
+      const previewTitle = document.querySelector('#preview-title');
+      const previewEmpty = document.querySelector('#preview-empty');
+      const previewDocument = document.querySelector('#preview-document');
+      const formMessage = document.querySelector('#form-message');
+
+      const value = (selector) => document.querySelector(selector).value.trim();
+      const getRows = () => [...itemsContainer.querySelectorAll('.item-row')];
+      const getFulfilment = () => document.querySelector('input[name="fulfilment"]:checked').value;
+      const setMessage = (message = '', type = '') => {
+        formMessage.textContent = message;
+        formMessage.className = `form-message${type ? ` is-${type}` : ''}`;
+      };
+      const parseQuantity = (input) => {
+        const normalized = String(input).trim();
+        if (!/^\d+(?:\.\d{1,3})?$/.test(normalized)) return null;
+        const quantity = Number(normalized);
+        return Number.isFinite(quantity) && quantity > 0 && quantity <= MAX_QUANTITY ? quantity : null;
+      };
+      const parseMoneyCents = (input, { allowZero = false } = {}) => {
+        const normalized = String(input).trim();
+        if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+        const [whole, fraction = ''] = normalized.split('.');
+        const cents = (Number(whole) * 100) + Number(fraction.padEnd(2, '0'));
+        if (!Number.isSafeInteger(cents) || cents > MAX_PRICE_CENTS) return null;
+        return cents > 0 || (allowZero && cents === 0) ? cents : null;
+      };
+      const calculateLineCents = (quantity, unitPrice) => {
+        if (!Number.isFinite(quantity) || quantity <= 0 || quantity > MAX_QUANTITY || !Number.isFinite(unitPrice) || unitPrice <= 0) return null;
+        const unitPriceCents = Math.round(unitPrice * 100);
+        if (!Number.isSafeInteger(unitPriceCents) || unitPriceCents <= 0 || unitPriceCents > MAX_PRICE_CENTS) return null;
+        const amountCents = Math.round(quantity * unitPriceCents);
+        if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return null;
+        return { quantity, unitPriceCents, amountCents };
+      };
+      const calculateLineFromInputs = (quantityInput, priceInput) => {
+        const quantity = parseQuantity(quantityInput);
+        const unitPriceCents = parseMoneyCents(priceInput);
+        if (quantity === null || unitPriceCents === null) return null;
+        const amountCents = Math.round(quantity * unitPriceCents);
+        if (!Number.isSafeInteger(amountCents) || amountCents <= 0) return null;
+        return { quantity, unitPriceCents, amountCents };
+      };
+      const formatCents = (cents) => `R${(cents / 100).toFixed(2)}`;
+      const formatQuantity = (quantity) => quantity.toFixed(3).replace(/\.?0+$/, '');
+      const normalizePhoneNumber = (input) => {
+        const original = String(input).trim();
+        if (!original) throw new Error('Enter the destination WhatsApp number.');
+        if (!/^\+?[0-9 ()-]+$/.test(original)) throw new Error('Use digits with optional spaces, hyphens, parentheses and one leading plus sign only.');
+        if ((original.match(/\+/g) || []).length > 1 || (original.includes('+') && !original.startsWith('+'))) throw new Error('A plus sign is permitted only once at the beginning.');
+        let digits = original.replace(/^\+/, '').replace(/[ ()-]/g, '');
+        if (!/^\d+$/.test(digits)) throw new Error('The destination WhatsApp number contains unsupported characters.');
+        if (digits.startsWith('00')) throw new Error('Use a leading plus sign or a direct international country code, not 00.');
+        if (digits.startsWith('0')) digits = `27${digits.slice(1)}`;
+        if (digits.length < 8 || digits.length > 15) throw new Error('The normalized WhatsApp number must contain between 8 and 15 digits.');
+        return digits;
+      };
+      const calculateRow = (row) => {
+        const calculation = calculateLineFromInputs(row.querySelector('.item-quantity').value, row.querySelector('.item-price').value);
+        row.querySelector('.item-amount').value = calculation ? formatCents(calculation.amountCents) : '';
+        return calculation;
+      };
+      const updateRemoveButtons = () => {
+        const rows = getRows();
+        rows.forEach((row) => { row.querySelector('.remove-button').hidden = rows.length === 1; });
+      };
+      const addItem = (values = {}) => {
+        if (getRows().length >= MAX_ITEMS) {
+          setMessage(`A maximum of ${MAX_ITEMS} items can be included in one request.`, 'error');
+          addItemButton.focus();
+          return null;
+        }
+        const row = itemTemplate.content.firstElementChild.cloneNode(true);
+        row.querySelector('.item-description').value = values.description || '';
+        row.querySelector('.item-variant').value = values.variant || '';
+        row.querySelector('.item-quantity').value = values.quantity ?? 1;
+        row.querySelector('.item-price').value = values.unitPrice ?? values.price ?? '';
+        itemsContainer.appendChild(row);
+        calculateRow(row);
+        updateRemoveButtons();
+        calculateTotals();
+        return row;
+      };
+      const updateFulfilment = () => {
+        const isDelivery = getFulfilment() === 'Delivery';
+        deliveryFields.hidden = !isDelivery;
+        deliveryAddress.disabled = !isDelivery;
+        deliveryAddress.required = isDelivery;
+        deliveryFee.disabled = !isDelivery;
+        deliveryTotalRow.hidden = !isDelivery;
+        if (!isDelivery) deliveryFee.value = '0.00';
+        calculateTotals();
+      };
+      const calculateTotals = () => {
+        let subtotalCents = 0;
+        let safe = getRows().length > 0;
+        getRows().forEach((row) => {
+          const calculation = calculateRow(row);
+          if (!calculation) {
+            safe = false;
+            return;
+          }
+          subtotalCents += calculation.amountCents;
+          if (!Number.isSafeInteger(subtotalCents)) safe = false;
+        });
+        let deliveryFeeCents = 0;
+        if (getFulfilment() === 'Delivery') {
+          const feeValue = deliveryFee.value.trim();
+          deliveryFeeCents = feeValue === '' ? 0 : parseMoneyCents(feeValue, { allowZero: true });
+          if (deliveryFeeCents === null) safe = false;
+        }
+        const totalCents = subtotalCents + (deliveryFeeCents || 0);
+        if (!Number.isSafeInteger(totalCents) || totalCents < 0) safe = false;
+        const totals = safe ? { subtotalCents, deliveryFeeCents, totalCents } : null;
+        runningSubtotal.textContent = formatCents(totals?.subtotalCents || 0);
+        subtotalTotal.textContent = formatCents(totals?.subtotalCents || 0);
+        deliveryTotal.textContent = formatCents(totals?.deliveryFeeCents || 0);
+        requestedTotal.textContent = formatCents(totals?.totalCents || 0);
+        return totals;
+      };
+      const clearValidation = () => {
+        form.querySelectorAll('input, textarea').forEach((control) => control.setCustomValidity(''));
+      };
+      const validateRequiredText = () => {
+        form.querySelectorAll('input[required], textarea[required]').forEach((control) => {
+          if (control.type !== 'number' && control.value.trim() === '') control.setCustomValidity('Please complete this required field.');
+        });
+      };
+      const validatePhone = () => {
+        const phone = document.querySelector('#whatsapp-number');
+        try { normalizePhoneNumber(phone.value); } catch (error) { phone.setCustomValidity(error.message); }
+      };
+      const validateDates = () => {
+        const orderDate = document.querySelector('#order-date');
+        const requestedDate = document.querySelector('#requested-date');
+        if (orderDate.value && requestedDate.value && requestedDate.value < orderDate.value) {
+          requestedDate.setCustomValidity('The requested fulfilment date cannot be earlier than the order date.');
+        }
+      };
+      const validateItems = () => {
+        let valid = getRows().length > 0;
+        getRows().forEach((row) => {
+          const description = row.querySelector('.item-description');
+          const quantity = row.querySelector('.item-quantity');
+          const price = row.querySelector('.item-price');
+          if (!description.value.trim()) { description.setCustomValidity('Enter a product or service description.'); valid = false; }
+          const parsedQuantity = parseQuantity(quantity.value);
+          if (parsedQuantity === null) { quantity.setCustomValidity('Quantity must be a finite number greater than zero, no more than 1,000,000, with up to three decimal places.'); valid = false; }
+          const priceCents = parseMoneyCents(price.value);
+          if (priceCents === null) { price.setCustomValidity('Unit price must be a valid positive rand amount with no more than two decimal places.'); valid = false; }
+          if (parsedQuantity !== null && priceCents !== null && !calculateLineFromInputs(quantity.value, price.value)) {
+            price.setCustomValidity('This line amount is too large or too small to calculate safely.');
+            valid = false;
+          }
+        });
+        return valid;
+      };
+      const validateDelivery = () => {
+        if (getFulfilment() !== 'Delivery') return;
+        const feeValue = deliveryFee.value.trim();
+        if (feeValue !== '' && parseMoneyCents(feeValue, { allowZero: true }) === null) {
+          deliveryFee.setCustomValidity('Enter a valid delivery fee from R0.00 to R9,999,999.99.');
+        }
+      };
+      const formatDate = (dateString) => {
+        const date = new Date(`${dateString}T00:00:00`);
+        return new Intl.DateTimeFormat('en-ZA', { dateStyle: 'long' }).format(date);
+      };
+      const collectOrderData = () => {
+        const items = getRows().map((row) => {
+          const calculation = calculateRow(row);
+          return {
+            description: row.querySelector('.item-description').value.trim(),
+            variant: row.querySelector('.item-variant').value.trim(),
+            quantity: calculation.quantity,
+            unitPriceCents: calculation.unitPriceCents,
+            amountCents: calculation.amountCents
+          };
+        });
+        return {
+          businessName: value('#business-name'),
+          destinationNumber: normalizePhoneNumber(value('#whatsapp-number')),
+          orderInstructions: value('#order-instructions'),
+          customerName: value('#customer-name'),
+          customerPhone: value('#customer-phone'),
+          orderNumber: value('#order-number'),
+          orderDate: value('#order-date'),
+          requestedDate: value('#requested-date'),
+          requestedTime: value('#requested-time'),
+          customerNotes: value('#customer-notes'),
+          fulfilment: getFulfilment(),
+          deliveryAddress: value('#delivery-address'),
+          items,
+          ...calculateTotals()
+        };
+      };
+      const buildOrderMessage = (data) => {
+        const lines = [
+          `Hello ${data.businessName},`,
+          '',
+          `This is an order request: ${data.orderNumber}`,
+          `Customer: ${data.customerName}`
+        ];
+        if (data.customerPhone) lines.push(`Customer telephone: ${data.customerPhone}`);
+        lines.push('', 'Requested items:');
+        data.items.forEach((item, index) => {
+          const variant = item.variant ? ` — ${item.variant}` : '';
+          lines.push(`${index + 1}. ${item.description}${variant}`);
+          lines.push(`   ${formatQuantity(item.quantity)} × ${formatCents(item.unitPriceCents)} = ${formatCents(item.amountCents)}`);
+        });
+        lines.push('', `Subtotal: ${formatCents(data.subtotalCents)}`);
+        if (data.fulfilment === 'Delivery') lines.push(`Delivery fee: ${formatCents(data.deliveryFeeCents)}`);
+        lines.push(`Requested total: ${formatCents(data.totalCents)}`);
+        lines.push('', `Requested fulfilment: ${data.fulfilment}`);
+        if (data.fulfilment === 'Delivery') lines.push(`Delivery address: ${data.deliveryAddress}`);
+        lines.push(`Requested for: ${formatDate(data.requestedDate)}${data.requestedTime ? ` at ${data.requestedTime}` : ''}`);
+        if (data.customerNotes) lines.push(`Customer notes: ${data.customerNotes}`);
+        if (data.orderInstructions) lines.push(`Ordering note: ${data.orderInstructions}`);
+        lines.push(
+          '',
+          'Please confirm availability, pricing, fulfilment details and acceptance. The requested total may require confirmation. No payment has been made. No stock is reserved.',
+          'Opening WhatsApp prepares this request for review; it does not prove the message was sent or received.'
+        );
+        return lines.join('\n');
+      };
+      const buildWhatsAppUrl = (number, message) => `https://wa.me/${normalizePhoneNumber(number)}?text=${encodeURIComponent(message)}`;
+      const validateForm = () => {
+        updateFulfilment();
+        clearValidation();
+        validateRequiredText();
+        validatePhone();
+        validateDates();
+        const itemsValid = validateItems();
+        validateDelivery();
+        const totals = calculateTotals();
+        const valid = form.reportValidity();
+        if (!valid || !itemsValid || !totals) {
+          setMessage('Please correct the highlighted order-request details before continuing.', 'error');
+          (form.querySelector(':invalid') || addItemButton).focus();
+          return false;
+        }
+        if (totals.totalCents <= 0) {
+          const price = getRows()[0]?.querySelector('.item-price');
+          if (price) {
+            price.setCustomValidity('The requested total must be greater than zero.');
+            form.reportValidity();
+            price.focus();
+          }
+          setMessage('The requested total must be greater than zero.', 'error');
+          return false;
+        }
+        const message = buildOrderMessage(collectOrderData());
+        if (message.length > MESSAGE_LIMIT) {
+          customerNotes.setCustomValidity(`The prepared WhatsApp message exceeds ${MESSAGE_LIMIT} characters. Shorten the notes or item details.`);
+          form.reportValidity();
+          customerNotes.focus();
+          setMessage(`The prepared WhatsApp message exceeds ${MESSAGE_LIMIT} characters. Shorten the request before continuing.`, 'error');
+          return false;
+        }
+        return true;
+      };
+      const textElement = (tag, text, className = '') => {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        if (className) element.className = className;
+        return element;
+      };
+      const previewCard = (label, content) => {
+        const card = document.createElement('div');
+        card.className = 'preview-card';
+        card.append(textElement('strong', label), textElement('span', content));
+        return card;
+      };
+      const previewCopy = (heading, content) => {
+        const section = document.createElement('section');
+        section.className = 'preview-copy';
+        section.append(textElement('h3', heading), textElement('p', content));
+        return section;
+      };
+      const renderPreview = (data, message = buildOrderMessage(data)) => {
+        const header = document.createElement('div');
+        header.className = 'order-preview-header';
+        header.appendChild(textElement('h3', 'ORDER REQUEST', 'order-preview-title'));
+        const meta = document.createElement('div');
+        meta.className = 'order-meta';
+        const number = document.createElement('p');
+        number.append(textElement('strong', 'Request # '), document.createTextNode(data.orderNumber));
+        const date = document.createElement('p');
+        date.append(textElement('strong', 'Created '), document.createTextNode(formatDate(data.orderDate)));
+        meta.append(number, date);
+        header.appendChild(meta);
+
+        const parties = document.createElement('div');
+        parties.className = 'preview-parties';
+        parties.append(previewCard('Business', data.businessName), previewCard('Customer', data.customerName));
+        const dates = document.createElement('div');
+        dates.className = 'preview-dates';
+        dates.append(
+          previewCard('Requested fulfilment', data.fulfilment),
+          previewCard('Requested date and time', `${formatDate(data.requestedDate)}${data.requestedTime ? ` at ${data.requestedTime}` : ''}`)
+        );
+
+        const tableWrap = document.createElement('div');
+        tableWrap.className = 'preview-table-wrap';
+        tableWrap.tabIndex = 0;
+        tableWrap.setAttribute('role', 'region');
+        tableWrap.setAttribute('aria-label', 'Itemized order request');
+        const table = document.createElement('table');
+        table.className = 'preview-table';
+        const caption = textElement('caption', 'Requested items', 'sr-only');
+        const head = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        ['Description', 'Variant', 'Qty', 'Unit price', 'Amount'].forEach((label) => headRow.appendChild(textElement('th', label)));
+        head.appendChild(headRow);
+        const body = document.createElement('tbody');
+        data.items.forEach((item) => {
+          const row = document.createElement('tr');
+          row.append(
+            textElement('td', item.description),
+            textElement('td', item.variant || '—'),
+            textElement('td', formatQuantity(item.quantity)),
+            textElement('td', formatCents(item.unitPriceCents)),
+            textElement('td', formatCents(item.amountCents))
+          );
+          body.appendChild(row);
+        });
+        table.append(caption, head, body);
+        tableWrap.appendChild(table);
+
+        const totals = document.createElement('div');
+        totals.className = 'preview-totals';
+        const totalRow = (label, amount, className = '') => {
+          const row = document.createElement('p');
+          if (className) row.className = className;
+          row.append(textElement('span', label), textElement('strong', formatCents(amount)));
+          return row;
+        };
+        totals.appendChild(totalRow('Subtotal', data.subtotalCents));
+        if (data.fulfilment === 'Delivery') totals.appendChild(totalRow('Delivery fee', data.deliveryFeeCents));
+        totals.appendChild(totalRow('Requested total', data.totalCents, 'preview-total'));
+
+        const content = [header, parties, dates];
+        if (data.fulfilment === 'Delivery') content.push(previewCopy('Requested delivery address', data.deliveryAddress));
+        content.push(tableWrap, totals);
+        if (data.customerNotes) content.push(previewCopy('Customer notes', data.customerNotes));
+        if (data.orderInstructions) content.push(previewCopy('Ordering instructions', data.orderInstructions));
+        content.push(textElement('p', 'This is a request only. The business must confirm availability, pricing, fulfilment details and acceptance. No stock is reserved and no payment is processed.', 'request-disclaimer'));
+        const messageSection = document.createElement('section');
+        messageSection.className = 'preview-copy';
+        const exactMessage = textElement('pre', message, 'message-preview');
+        exactMessage.tabIndex = 0;
+        messageSection.append(textElement('h3', `Exact WhatsApp message (${message.length}/${MESSAGE_LIMIT} characters)`), exactMessage);
+        content.push(messageSection);
+        previewDocument.replaceChildren(...content);
+        previewDocument.hidden = false;
+        previewEmpty.hidden = true;
+      };
+      const prepareRequest = () => {
+        if (!validateForm()) return null;
+        const data = collectOrderData();
+        const message = buildOrderMessage(data);
+        renderPreview(data, message);
+        return { data, message, url: buildWhatsAppUrl(data.destinationNumber, message) };
+      };
+      const previewOrder = () => {
+        const prepared = prepareRequest();
+        if (!prepared) return false;
+        setMessage('Order request preview updated. Review all details before continuing.', 'success');
+        previewTitle.focus();
+        return true;
+      };
+      const fallbackCopy = (message) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = message;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.select();
+        let copied = false;
+        try { copied = typeof document.execCommand === 'function' && document.execCommand('copy'); } catch { copied = false; }
+        textarea.remove();
+        return copied;
+      };
+      const copyOrderMessage = async () => {
+        const prepared = prepareRequest();
+        if (!prepared) return false;
+        let copied = false;
+        try {
+          if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(prepared.message);
+            copied = true;
+          } else {
+            copied = fallbackCopy(prepared.message);
+          }
+        } catch {
+          copied = fallbackCopy(prepared.message);
+        }
+        if (!copied) {
+          setMessage('The message could not be copied automatically. Select it from the preview and copy it manually.', 'error');
+          document.querySelector('.message-preview')?.focus();
+          return false;
+        }
+        setMessage('Order request message copied. Review it before sending.', 'success');
+        return prepared.message;
+      };
+      const openWhatsApp = () => {
+        const prepared = prepareRequest();
+        if (!prepared) return false;
+        const openedWindow = window.open(prepared.url, '_blank');
+        if (!openedWindow) {
+          setMessage('WhatsApp could not be opened. Allow pop-ups or copy the prepared message instead.', 'error');
+          return false;
+        }
+        try { openedWindow.opener = null; } catch { /* A restricted browser context may already have severed the opener. */ }
+        setMessage('WhatsApp opened with your prepared order request. Review it before sending.', 'success');
+        return prepared.url;
+      };
+      const localDateString = (date) => new Date(date.getTime() - (date.getTimezoneOffset() * 60000)).toISOString().slice(0, 10);
+      const applyDefaults = () => {
+        const today = new Date();
+        document.querySelector('#order-number').value = `ORD-${today.getFullYear()}-001`;
+        document.querySelector('#order-date').value = localDateString(today);
+        document.querySelector('#requested-date').value = localDateString(today);
+        document.querySelector('#fulfilment-collection').checked = true;
+        deliveryFee.value = '0.00';
+        updateFulfilment();
+      };
+      const clearPreview = () => {
+        previewDocument.replaceChildren();
+        previewDocument.hidden = true;
+        previewEmpty.hidden = false;
+      };
+      const resetOrder = () => {
+        if (!window.confirm('Clear this order request and restore the default form?')) return false;
+        form.reset();
+        clearValidation();
+        itemsContainer.replaceChildren();
+        applyDefaults();
+        addItem();
+        clearPreview();
+        setMessage('Order-request form reset.', 'success');
+        document.querySelector('#business-name').focus();
+        return true;
+      };
+
+      itemsContainer.addEventListener('input', (event) => {
+        event.target.setCustomValidity('');
+        calculateRow(event.target.closest('.item-row'));
+        calculateTotals();
+        setMessage();
+      });
+      itemsContainer.addEventListener('click', (event) => {
+        const removeButton = event.target.closest('.remove-button');
+        if (!removeButton) return;
+        if (getRows().length > 1) removeButton.closest('.item-row').remove();
+        updateRemoveButtons();
+        calculateTotals();
+        setMessage();
+      });
+      form.addEventListener('input', (event) => {
+        event.target.setCustomValidity('');
+        if (event.target.name === 'fulfilment') updateFulfilment();
+        calculateTotals();
+        setMessage();
+      });
+      form.addEventListener('change', (event) => {
+        if (event.target.name === 'fulfilment') updateFulfilment();
+        calculateTotals();
+        setMessage();
+      });
+      form.addEventListener('submit', (event) => event.preventDefault());
+      addItemButton.addEventListener('click', () => addItem());
+      previewButton.addEventListener('click', previewOrder);
+      copyButton.addEventListener('click', () => { void copyOrderMessage(); });
+      whatsappButton.addEventListener('click', openWhatsApp);
+      resetButton.addEventListener('click', resetOrder);
+
+      applyDefaults();
+      addItem();
+      window.whatsAppOrderBuilder = {
+        MESSAGE_LIMIT,
+        addItem,
+        buildOrderMessage,
+        buildWhatsAppUrl,
+        calculateLineCents,
+        calculateTotals,
+        collectOrderData,
+        copyOrderMessage,
+        normalizePhoneNumber,
+        openWhatsApp,
+        parseMoneyCents,
+        parseQuantity,
+        previewOrder,
+        renderPreview,
+        resetOrder,
+        updateFulfilment,
+        validateForm
+      };
+    })();
+  </script>
+</body>
+</html>
