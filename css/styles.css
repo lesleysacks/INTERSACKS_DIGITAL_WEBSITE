@@ -1296,8 +1296,8 @@ font-size:14px;
 line-height:1.9;
 color:#68717a;
 margin-bottom:25px}
-/* Keep the header uncluttered through tablet widths. */
-@media (min-width:761px) and (max-width:980px){
+/* Keep the expanded header uncluttered through compact laptop widths. */
+@media (min-width:761px) and (max-width:1100px){
 .nav-shell{
 height:84px;
 padding:0 32px}
