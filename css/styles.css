@@ -976,6 +976,16 @@ content:"";
 width:29px;
 height:1px;
 background:var(--gold)}
+.portfolio-concept-notice{
+max-width:930px;
+margin:0 0 32px;
+padding:24px 26px;
+border:1px solid var(--gold);
+border-left:5px solid var(--gold);
+background:#fffaf0;
+font-size:13px;
+line-height:1.8;
+color:#4e5964}
 .recent-projects-grid{
 display:grid;
 grid-template-columns:repeat(3,minmax(0,1fr));
@@ -1047,6 +1057,17 @@ margin:0 0 9px;
 font-size:9px;
 font-weight:800;
 letter-spacing:1.5px;
+text-transform:uppercase;
+color:var(--gold-dark)}
+.concept-badge{
+align-self:flex-start;
+margin:0 0 12px;
+padding:5px 8px;
+border:1px solid var(--gold-dark);
+font-size:8px;
+font-weight:800;
+letter-spacing:.8px;
+line-height:1.4;
 text-transform:uppercase;
 color:var(--gold-dark)}
 .project-card-body h4,.software-automation .project-card-body h3{
