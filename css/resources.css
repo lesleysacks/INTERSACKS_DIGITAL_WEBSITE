@@ -494,6 +494,11 @@
   gap: 18px;
 }
 
+.token-card,
+.snippet-card {
+  min-width: 0;
+}
+
 .snippet-card {
   border: 1px solid rgba(20, 32, 45, .15);
   background: #fff;

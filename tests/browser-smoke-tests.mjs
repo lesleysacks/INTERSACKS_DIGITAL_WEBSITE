@@ -179,8 +179,35 @@ for (const width of widths) {
     if (document.fonts) await document.fonts.ready;
     const images = [...document.querySelectorAll('.featured-project-image, .project-card-image')];
     for (const image of images) {
-      image.scrollIntoView({ block: 'center' });
-      if (!image.complete) await new Promise((resolve) => image.addEventListener('load', resolve, { once: true }));
+      await new Promise((resolve, reject) => {
+        const src = image.currentSrc || image.src;
+        let timeout;
+        const cleanup = () => {
+          clearTimeout(timeout);
+          image.removeEventListener('load', handleLoad);
+          image.removeEventListener('error', handleError);
+        };
+        const handleLoad = () => {
+          if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+          cleanup();
+          resolve();
+        };
+        const handleError = () => {
+          cleanup();
+          reject(new Error('Work image failed to load: ' + src));
+        };
+
+        image.addEventListener('load', handleLoad);
+        image.addEventListener('error', handleError);
+        timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Timed out waiting for Work image: ' + src));
+        }, 5000);
+
+        image.loading = 'eager';
+        image.scrollIntoView({ block: 'center' });
+        handleLoad();
+      });
     }
     window.scrollTo(0, 0);
   })()`);
@@ -194,7 +221,7 @@ for (const width of widths) {
       actionHeight: Math.min(...[...document.querySelectorAll('.case-actions a, .project-actions a')].map((link) => link.getBoundingClientRect().height))
     };
   })()`);
-  const expectedColumns = width <= 375 ? 1 : width === 768 ? 2 : 3;
+  const expectedColumns = width <= 760 ? 1 : width <= 1100 ? 2 : 3;
   assert(workLayout.columns === expectedColumns, `Work grid uses ${expectedColumns} column(s) at ${width}px`);
   assert(workLayout.imagesReady && workLayout.imageMetadata, `Work images load with 1440×900 metadata and object-fit cover at ${width}px`);
   assert(workLayout.actionHeight >= 44, `Work action links are at least 44px high at ${width}px (measured ${workLayout.actionHeight}px)`);
@@ -211,7 +238,7 @@ const resourceHub = await evaluate(`(() => {
   document.querySelector('[data-reset-resources]').click();
   document.querySelector('[data-filter="brand"]').click();
   const brandMatches = cards.filter((card) => !card.hidden);
-  const brandOnly = brandMatches.every((card) => card.dataset.category.split(/\s+/).includes('brand'));
+  const brandOnly = brandMatches.every((card) => card.dataset.category.split(' ').filter(Boolean).includes('brand'));
 
   document.querySelector('[data-reset-resources]').click();
   return {
