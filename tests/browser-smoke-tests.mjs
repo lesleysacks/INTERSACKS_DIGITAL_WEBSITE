@@ -174,6 +174,37 @@ for (const width of widths) {
     assert(focus.tag !== 'BODY' && focus.outlineWidth >= 2, `${page} exposes a visible keyboard focus outline at ${width}px`);
   }
 
+  await navigate('services.html');
+  const brandingProof = await evaluate(`(() => {
+    const article = document.querySelector('.branding-service');
+    const ctas = [...document.querySelectorAll('.service-proof-cta')];
+    const cta = ctas[0];
+    const style = cta ? getComputedStyle(cta) : null;
+    const rect = cta ? cta.getBoundingClientRect() : null;
+    return {
+      count: ctas.length,
+      insideBranding: Boolean(article && cta && article.contains(cta)),
+      href: cta ? cta.getAttribute('href') : '',
+      target: cta ? cta.getAttribute('target') : '',
+      rel: cta ? cta.getAttribute('rel').split(' ').filter(Boolean) : [],
+      accessibleName: cta ? cta.getAttribute('aria-label') : '',
+      visible: Boolean(rect && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'),
+      height: rect ? rect.height : 0,
+      noOverflow: document.documentElement.scrollWidth === document.documentElement.clientWidth,
+      outsideBranding: document.querySelectorAll('.service-detail > article:not(.branding-service) .service-proof-cta').length
+    };
+  })()`);
+  assert(brandingProof.count === 1, `Services page exposes exactly one Branding proof CTA at ${width}px`);
+  assert(brandingProof.insideBranding, `Branding proof CTA is inside the Branding service at ${width}px`);
+  assert(brandingProof.href === 'https://lesleysacks.github.io/INTERSACKS_APPAREL_WEBSITE/', `Branding proof CTA uses the exact Apparel URL at ${width}px`);
+  assert(brandingProof.target === '_blank', `Branding proof CTA opens in a new tab at ${width}px`);
+  assert(brandingProof.rel.includes('noopener') && brandingProof.rel.includes('noreferrer'), `Branding proof CTA protects the external tab at ${width}px`);
+  assert(brandingProof.accessibleName === 'See InterSacks Apparel branding in action (opens in a new tab)', `Branding proof CTA has the exact accessible name at ${width}px`);
+  assert(brandingProof.visible, `Branding proof CTA is visible at ${width}px`);
+  assert(brandingProof.height >= 44, `Branding proof CTA is at least 44px high at ${width}px (measured ${brandingProof.height}px)`);
+  assert(brandingProof.noOverflow, `Branding proof CTA causes no viewport overflow at ${width}px`);
+  assert(brandingProof.outsideBranding === 0, `No other service contains the Branding proof CTA at ${width}px`);
+
   await navigate('work.html');
   await evaluate(`(async () => {
     if (document.fonts) await document.fonts.ready;
