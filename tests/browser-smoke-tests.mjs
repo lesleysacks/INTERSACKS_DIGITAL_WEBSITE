@@ -19,6 +19,7 @@ const pages = [
   'process.html',
   'contact.html',
   'payments.html',
+  'resources.html',
   'assets/invoice_generator.html',
   'assets/quote_generator.html',
   'assets/job_card_generator.html',
@@ -178,8 +179,35 @@ for (const width of widths) {
     if (document.fonts) await document.fonts.ready;
     const images = [...document.querySelectorAll('.featured-project-image, .project-card-image')];
     for (const image of images) {
-      image.scrollIntoView({ block: 'center' });
-      if (!image.complete) await new Promise((resolve) => image.addEventListener('load', resolve, { once: true }));
+      await new Promise((resolve, reject) => {
+        const src = image.currentSrc || image.src;
+        let timeout;
+        const cleanup = () => {
+          clearTimeout(timeout);
+          image.removeEventListener('load', handleLoad);
+          image.removeEventListener('error', handleError);
+        };
+        const handleLoad = () => {
+          if (!image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return;
+          cleanup();
+          resolve();
+        };
+        const handleError = () => {
+          cleanup();
+          reject(new Error('Work image failed to load: ' + src));
+        };
+
+        image.addEventListener('load', handleLoad);
+        image.addEventListener('error', handleError);
+        timeout = setTimeout(() => {
+          cleanup();
+          reject(new Error('Timed out waiting for Work image: ' + src));
+        }, 5000);
+
+        image.loading = 'eager';
+        image.scrollIntoView({ block: 'center' });
+        handleLoad();
+      });
     }
     window.scrollTo(0, 0);
   })()`);
@@ -193,11 +221,43 @@ for (const width of widths) {
       actionHeight: Math.min(...[...document.querySelectorAll('.case-actions a, .project-actions a')].map((link) => link.getBoundingClientRect().height))
     };
   })()`);
-  const expectedColumns = width <= 375 ? 1 : width === 768 ? 2 : 3;
+  const expectedColumns = width <= 760 ? 1 : width <= 1100 ? 2 : 3;
   assert(workLayout.columns === expectedColumns, `Work grid uses ${expectedColumns} column(s) at ${width}px`);
   assert(workLayout.imagesReady && workLayout.imageMetadata, `Work images load with 1440×900 metadata and object-fit cover at ${width}px`);
   assert(workLayout.actionHeight >= 44, `Work action links are at least 44px high at ${width}px (measured ${workLayout.actionHeight}px)`);
 }
+
+await navigate('resources.html');
+const resourceHub = await evaluate(`(() => {
+  const cards = [...document.querySelectorAll('[data-resource-card]')];
+  const search = document.querySelector('#resource-search');
+  search.value = 'sitemap';
+  search.dispatchEvent(new Event('input', { bubbles: true }));
+  const sitemapMatches = cards.filter((card) => !card.hidden).length;
+
+  document.querySelector('[data-reset-resources]').click();
+  document.querySelector('[data-filter="brand"]').click();
+  const brandMatches = cards.filter((card) => !card.hidden);
+  const brandOnly = brandMatches.every((card) => card.dataset.category.split(' ').filter(Boolean).includes('brand'));
+
+  document.querySelector('[data-reset-resources]').click();
+  return {
+    cardCount: cards.length,
+    sitemapMatches,
+    brandCount: brandMatches.length,
+    brandOnly,
+    restoredCount: cards.filter((card) => !card.hidden).length,
+    downloads: document.querySelectorAll('a[download]').length,
+    copyControls: document.querySelectorAll('[data-copy], [data-copy-target]').length,
+    hasLiveStatus: Boolean(document.querySelector('[data-result-count][aria-live], [data-copy-toast][aria-live]'))
+  };
+})()`);
+assert(resourceHub.cardCount >= 18, 'Resource Hub exposes at least 18 useful resources');
+assert(resourceHub.sitemapMatches === 1, 'Resource Hub search isolates the sitemap automation');
+assert(resourceHub.brandCount >= 8 && resourceHub.brandOnly, 'Resource Hub brand filter shows only brand resources');
+assert(resourceHub.restoredCount === resourceHub.cardCount, 'Resource Hub reset restores every resource');
+assert(resourceHub.downloads === 5, 'Resource Hub provides three Python and two planning downloads');
+assert(resourceHub.copyControls >= 9 && resourceHub.hasLiveStatus, 'Resource Hub copy controls provide accessible status feedback');
 
 await send('Emulation.setScriptExecutionDisabled', { value: true });
 await navigate('index.html');
@@ -1613,5 +1673,5 @@ assert(orderBuilder.resetState.businessName === '' && orderBuilder.resetState.de
 await send('Page.close').catch(() => {});
 socket.close();
 
-console.log(JSON.stringify({ checks: checks.length, failures, invoice, quote, jobCard, orderBuilder }, null, 2));
+console.log(JSON.stringify({ checks: checks.length, failures, resourceHub, invoice, quote, jobCard, orderBuilder }, null, 2));
 if (failures.length) process.exitCode = 1;
