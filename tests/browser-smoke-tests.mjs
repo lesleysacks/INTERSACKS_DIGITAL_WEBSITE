@@ -225,6 +225,40 @@ for (const width of widths) {
   assert(workLayout.columns === expectedColumns, `Work grid uses ${expectedColumns} column(s) at ${width}px`);
   assert(workLayout.imagesReady && workLayout.imageMetadata, `Work images load with 1440×900 metadata and object-fit cover at ${width}px`);
   assert(workLayout.actionHeight >= 44, `Work action links are at least 44px high at ${width}px (measured ${workLayout.actionHeight}px)`);
+  const apparel = await evaluate(`(() => {
+    const showcases = [...document.querySelectorAll('.apparel-showcase')];
+    const ctas = [...document.querySelectorAll('.apparel-showcase-cta')];
+    const showcase = showcases[0];
+    const cta = ctas[0];
+    const automation = document.querySelector('.software-automation');
+    const ctaStyle = cta ? getComputedStyle(cta) : null;
+    const innerStyle = showcase ? getComputedStyle(showcase.querySelector('.apparel-showcase-inner')) : null;
+    const rect = cta ? cta.getBoundingClientRect() : null;
+    return {
+      showcaseCount: showcases.length,
+      ctaCount: ctas.length,
+      href: cta ? cta.getAttribute('href') : '',
+      target: cta ? cta.getAttribute('target') : '',
+      rel: cta ? cta.getAttribute('rel').split(' ').filter(Boolean) : [],
+      accessibleName: cta ? cta.getAttribute('aria-label') : '',
+      visible: Boolean(rect && rect.width > 0 && rect.height > 0 && ctaStyle.display !== 'none' && ctaStyle.visibility !== 'hidden'),
+      height: rect ? rect.height : 0,
+      beforeAutomation: Boolean(showcase && automation && (showcase.compareDocumentPosition(automation) & Node.DOCUMENT_POSITION_FOLLOWING)),
+      columns: innerStyle ? innerStyle.gridTemplateColumns.split(' ').length : 0,
+      noOverflow: document.documentElement.scrollWidth === document.documentElement.clientWidth
+    };
+  })()`);
+  assert(apparel.showcaseCount === 1, `Work page exposes exactly one Apparel showcase at ${width}px`);
+  assert(apparel.ctaCount === 1, `Work page exposes exactly one Apparel CTA at ${width}px`);
+  assert(apparel.href === 'https://lesleysacks.github.io/INTERSACKS_APPAREL_WEBSITE/', `Apparel CTA uses the exact storefront URL at ${width}px`);
+  assert(apparel.target === '_blank', `Apparel CTA opens in a new tab at ${width}px`);
+  assert(apparel.rel.includes('noopener') && apparel.rel.includes('noreferrer'), `Apparel CTA protects the external tab at ${width}px`);
+  assert(apparel.accessibleName === 'Explore InterSacks Apparel website (opens in a new tab)', `Apparel CTA has a clear accessible name at ${width}px`);
+  assert(apparel.visible, `Apparel CTA is visible at ${width}px`);
+  assert(apparel.height >= 44, `Apparel CTA is at least 44px high at ${width}px (measured ${apparel.height}px)`);
+  assert(apparel.beforeAutomation, `Apparel showcase appears before Software & Automation at ${width}px`);
+  assert(apparel.columns === (width <= 760 ? 1 : 2), `Apparel showcase uses the intended layout at ${width}px`);
+  assert(apparel.noOverflow, `Apparel showcase causes no horizontal overflow at ${width}px`);
 }
 
 await navigate('resources.html');
