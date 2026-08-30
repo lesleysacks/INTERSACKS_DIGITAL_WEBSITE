@@ -1,0 +1,57 @@
+<!doctype html>
+<!--
+MIT License
+Copyright (c) 2026 Lesley Sacks
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Birthday Card Template</title>
+  <style>
+    :root{--wine:#571729;--wine-dark:#2b0812;--ivory:#fff9ec;--gold:#d8b56a;--ink:#2d1720;--focus:#62d8ff;color-scheme:light}
+    *{box-sizing:border-box}html,body{margin:0;min-height:100%}body{min-height:100vh;display:grid;place-items:center;padding:32px 16px;background:radial-gradient(circle at top,#8c334b 0,var(--wine) 40%,var(--wine-dark) 100%);font-family:Georgia,"Times New Roman",serif;color:var(--ink)}
+    main,.stage,.card,.cover,.inside{min-width:0}main{width:min(920px,100%)}.stage{position:relative;width:100%;padding:18px;border:2px solid var(--gold);border-radius:26px;background:rgba(43,8,18,.48);box-shadow:0 28px 80px rgba(0,0,0,.35)}
+    .card{position:relative;min-height:570px;border:1px solid var(--gold);border-radius:16px;background:var(--ivory);overflow:hidden;perspective:1600px}.inside{min-height:570px;display:grid;place-items:center;padding:58px clamp(24px,7vw,86px);text-align:center;background:linear-gradient(135deg,#fffdf7,#f7ead1)}
+    .inside-content{max-width:660px}.kicker{margin:0 0 14px;color:#8b5c21;font:700 12px/1.4 system-ui,sans-serif;letter-spacing:.2em;text-transform:uppercase}h1,h2{margin:0;line-height:1.05}h1{font-size:clamp(44px,8vw,84px)}h2{font-size:clamp(38px,6vw,66px);color:var(--wine)}.salutation{margin:28px 0 14px;font-size:clamp(22px,3vw,30px)}.message{font:400 clamp(16px,2vw,19px)/1.75 system-ui,sans-serif}.message p{margin:10px 0}.signature{margin:25px 0 0;color:var(--wine);font-size:23px;font-style:italic}
+    .cover{position:absolute;inset:0;display:grid;place-items:center;padding:48px;text-align:center;color:var(--ivory);background:linear-gradient(145deg,var(--wine),var(--wine-dark));transform-origin:left center;transition:transform .9s cubic-bezier(.2,.8,.2,1);backface-visibility:hidden;z-index:2}.cover::before{content:"";position:absolute;inset:18px;border:1px solid var(--gold);border-radius:10px;pointer-events:none}.card.open .cover{transform:rotateY(-112deg)}.monogram{width:120px;height:120px;display:grid;place-items:center;margin:24px auto;border:1px solid var(--gold);border-radius:50%;color:var(--gold);font-size:38px}.recipient{margin:16px 0 0;color:#f5dca4;font:700 13px/1.5 system-ui,sans-serif;letter-spacing:.18em;text-transform:uppercase}
+    .toggle{position:absolute;right:28px;bottom:26px;z-index:4;min-height:48px;padding:12px 20px;border:1px solid var(--gold);border-radius:999px;background:var(--gold);color:var(--wine-dark);font:800 12px/1 system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.toggle:hover{background:#efd18c}.toggle:focus-visible{outline:4px solid var(--focus);outline-offset:4px}.status{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden}.confetti i{position:absolute;top:-20px;width:9px;height:15px;background:var(--gold);animation:fall 2.2s linear forwards}.confetti i:nth-child(2n){background:#fff}.confetti i:nth-child(3n){background:#ee7e9b}@keyframes fall{to{transform:translateY(110vh) rotate(720deg)}}
+    @media(max-width:600px){body{display:block;padding:14px 10px}main{margin:auto}.stage{padding:9px;border-radius:17px}.card,.inside{min-height:610px}.cover{padding:34px 28px}.cover::before{inset:10px}.inside{padding:44px 24px 90px}.toggle{right:50%;bottom:22px;transform:translateX(50%);width:calc(100% - 44px)}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}.card.open .cover{opacity:0;visibility:hidden;transform:none}}
+  </style>
+</head>
+<body>
+  <main aria-labelledby="cover-title">
+    <div class="stage">
+      <article class="card" id="birthday-card">
+        <section class="inside" aria-labelledby="inside-title"><div class="inside-content"><p class="kicker" id="inside-kicker"></p><h2 id="inside-title"></h2><p class="salutation" id="salutation"></p><div class="message" id="message"></div><p class="signature" id="signature"></p></div></section>
+        <section class="cover" aria-labelledby="cover-title"><div><p class="kicker" id="occasion"></p><div class="monogram" id="monogram" aria-hidden="true"></div><p class="kicker" id="cover-kicker"></p><h1 id="cover-title"></h1><p class="recipient" id="recipient"></p></div></section>
+        <button class="toggle" id="toggle" type="button" aria-expanded="false" aria-controls="birthday-card">Open card</button>
+      </article>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite"></p>
+    <div class="confetti" id="confetti" aria-hidden="true"></div>
+  </main>
+  <script>
+    // === CUSTOMIZE YOUR CARD HERE: edit only the values in CARD_CONFIG. ===
+    const CARD_CONFIG = {
+      pageTitle: 'A Birthday Wish', occasionLabel: 'Happy Birthday', recipientName: 'Someone Special', monogram: 'SS',
+      coverKicker: 'A celebration for', coverTitle: 'Your Day', insideKicker: 'Warm wishes', insideTitle: 'May today feel wonderful',
+      salutation: 'Dear Someone Special,', messageParagraphs: ['May your birthday bring bright moments, kind surprises, and plenty of reasons to smile.', 'Here is to a joyful year filled with possibility.'], signature: 'With warm wishes, Your Name'
+    };
+    const byId = (id) => document.getElementById(id);
+    document.title = CARD_CONFIG.pageTitle;
+    [['occasion','occasionLabel'],['recipient','recipientName'],['monogram','monogram'],['cover-kicker','coverKicker'],['cover-title','coverTitle'],['inside-kicker','insideKicker'],['inside-title','insideTitle'],['salutation','salutation'],['signature','signature']].forEach(([id,key]) => { byId(id).textContent = CARD_CONFIG[key]; });
+    CARD_CONFIG.messageParagraphs.forEach((text) => { const p=document.createElement('p'); p.textContent=text; byId('message').append(p); });
+    const card=byId('birthday-card'), toggle=byId('toggle'), status=byId('status'), reduced=matchMedia('(prefers-reduced-motion: reduce)');
+    function celebrate(){ if(reduced.matches)return; const box=byId('confetti'); box.textContent=''; for(let i=0;i<28;i++){const piece=document.createElement('i');piece.style.left=(Math.random()*100)+'%';piece.style.animationDelay=(Math.random()*.5)+'s';box.append(piece);}setTimeout(()=>{box.textContent='';},2800); }
+    function setOpen(open){card.classList.toggle('open',open);toggle.setAttribute('aria-expanded',String(open));toggle.textContent=open?'Close card':'Open card';status.textContent=open?'Birthday card opened. Inside message is visible.':'Birthday card closed. Front cover is visible.';if(open)celebrate();}
+    toggle.addEventListener('click',()=>setOpen(!card.classList.contains('open')));
+    toggle.addEventListener('keydown',(event)=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();setOpen(!card.classList.contains('open'));}});
+  </script>
+</body>
+</html>
