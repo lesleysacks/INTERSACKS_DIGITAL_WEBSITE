@@ -23,7 +23,9 @@ const pages = [
   'assets/invoice_generator.html',
   'assets/quote_generator.html',
   'assets/job_card_generator.html',
-  'assets/whatsapp_order_builder.html'
+  'assets/whatsapp_order_builder.html',
+  'assets/templates/greeting-cards/birthday-card-template.html',
+  'assets/templates/greeting-cards/valentine-card-template.html'
 ];
 
 const failures = [];
@@ -290,7 +292,90 @@ for (const width of widths) {
   assert(apparel.beforeAutomation, `Apparel showcase appears before Software & Automation at ${width}px`);
   assert(apparel.columns === (width <= 760 ? 1 : 2), `Apparel showcase uses the intended layout at ${width}px`);
   assert(apparel.noOverflow, `Apparel showcase causes no horizontal overflow at ${width}px`);
+  const greetingTemplates = await evaluate(`(() => {
+    const group = document.querySelector('.greeting-card-templates');
+    const independent = document.querySelector('#independent-concepts-title')?.closest('.project-group');
+    const cards = [...document.querySelectorAll('.greeting-card-template')];
+    const previews = [...document.querySelectorAll('.greeting-card-template .template-preview')];
+    const downloads = [...document.querySelectorAll('.greeting-card-template .template-download')];
+    const columns = group ? getComputedStyle(group.querySelector('.recent-projects-grid')).gridTemplateColumns.split(' ').length : 0;
+    return {
+      cards: cards.length,
+      oldValentineCount: [...document.querySelectorAll('.recent-project-card h4')].filter((heading) => heading.textContent.trim() === 'Valentine’s Cards').length,
+      afterIndependent: Boolean(group && independent && (independent.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING)),
+      previews: previews.length,
+      downloads: downloads.length,
+      safePreviews: previews.every((link) => link.target === '_blank' && link.relList.contains('noopener') && link.relList.contains('noreferrer')),
+      downloadable: downloads.every((link) => link.hasAttribute('download') && link.getAttribute('download').endsWith('.html')),
+      matchingSources: cards.every((card) => card.querySelector('.template-preview')?.getAttribute('href') === card.querySelector('.template-download')?.getAttribute('href')),
+      columns,
+      downloadHeight: Math.min(...downloads.map((link) => link.getBoundingClientRect().height))
+    };
+  })()`);
+  assert(greetingTemplates.cards === 2, `Work page exposes exactly two greeting-card template cards at ${width}px`);
+  assert(greetingTemplates.oldValentineCount === 0, `Work page does not duplicate the old Valentine project card at ${width}px`);
+  assert(greetingTemplates.afterIndependent, `Greeting templates appear after Independent Website Concepts at ${width}px`);
+  assert(greetingTemplates.previews === 2 && greetingTemplates.safePreviews, `Both template previews open safely at ${width}px`);
+  assert(greetingTemplates.downloads === 2 && greetingTemplates.downloadable, `Both templates provide descriptive HTML downloads at ${width}px`);
+  assert(greetingTemplates.matchingSources, `Each template preview and download uses the same source at ${width}px`);
+  assert(greetingTemplates.columns === (width <= 760 ? 1 : width <= 1100 ? 2 : 3), `Greeting templates use the established Work grid at ${width}px`);
+  assert(greetingTemplates.downloadHeight >= 44, `Greeting template downloads are at least 44px high at ${width}px`);
 }
+
+const templateBase = `${baseUrl}/assets/templates/greeting-cards`;
+const [birthdaySource, valentineSource, templateReadme, templateLicense] = await Promise.all([
+  fetch(`${templateBase}/birthday-card-template.html`).then((response) => response.text()),
+  fetch(`${templateBase}/valentine-card-template.html`).then((response) => response.text()),
+  fetch(`${templateBase}/README.md`).then((response) => response.text()),
+  fetch(`${templateBase}/LICENSE`).then((response) => response.text())
+]);
+const forbiddenTemplateMarkers = ['miss tammy', 'tammy rose', 't🌹r', 'les, neville', 'theveshni', 'us.png'];
+assert([birthdaySource, valentineSource].every((source) => forbiddenTemplateMarkers.every((marker) => !source.toLowerCase().includes(marker))), 'Greeting templates contain no personal reference-card markers');
+assert([birthdaySource, valentineSource].every((source) => source.includes('MIT License') && source.includes('Copyright (c) 2026 Lesley Sacks')), 'Both standalone template downloads retain the MIT notice');
+assert(templateLicense.includes('MIT License') && templateLicense.includes('Copyright (c) 2026 Lesley Sacks'), 'Greeting-template directory includes the MIT License');
+assert(templateReadme.includes('does **not** automatically license the rest of the InterSacks Digital website'), 'Greeting-template README clearly scopes the directory licence');
+assert([birthdaySource, valentineSource].every((source) => source.includes('const CARD_CONFIG') && !source.includes('innerHTML')), 'Greeting templates centralize editable content and avoid innerHTML');
+
+await navigate('assets/templates/greeting-cards/birthday-card-template.html');
+const birthdayInitial = await evaluate(`(() => ({
+  expanded: document.querySelector('#toggle').getAttribute('aria-expanded'),
+  externalAssets: document.querySelectorAll('link[rel="stylesheet"], script[src], img').length,
+  buttonHeight: document.querySelector('#toggle').getBoundingClientRect().height
+}))()`);
+assert(birthdayInitial.expanded === 'false' && birthdayInitial.externalAssets === 0, 'Birthday template starts closed and is fully self-contained');
+assert(birthdayInitial.buttonHeight >= 44, 'Birthday template open control is at least 44px high');
+await evaluate(`document.querySelector('#toggle').focus()`);
+await evaluate(`document.querySelector('#toggle').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+const birthdayOpened = await evaluate(`(() => ({ expanded: document.querySelector('#toggle').getAttribute('aria-expanded'), status: document.querySelector('#status').textContent }))()`);
+assert(birthdayOpened.expanded === 'true' && birthdayOpened.status.includes('opened'), 'Birthday template opens by keyboard and announces its state');
+await evaluate(`document.querySelector('#toggle').click()`);
+const birthdayClosed = await evaluate(`(() => ({ expanded: document.querySelector('#toggle').getAttribute('aria-expanded'), status: document.querySelector('#status').textContent }))()`);
+assert(birthdayClosed.expanded === 'false' && birthdayClosed.status.includes('closed'), 'Birthday template closes by pointer and announces its state');
+
+await navigate('assets/templates/greeting-cards/valentine-card-template.html');
+const valentineInitial = await evaluate(`(() => ({
+  buttons: document.querySelectorAll('.actions button').length,
+  placeholder: Boolean(document.querySelector('#placeholder')),
+  images: document.querySelectorAll('img').length,
+  externalAssets: document.querySelectorAll('link[rel="stylesheet"], script[src]').length
+}))()`);
+assert(valentineInitial.buttons === 2 && valentineInitial.placeholder && valentineInitial.images === 0 && valentineInitial.externalAssets === 0, 'Valentine template has two usable controls, a safe fallback, and no external assets');
+await evaluate(`document.querySelector('#positive').focus()`);
+await evaluate(`document.querySelector('#positive').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))`);
+const positiveResponse = await evaluate(`document.querySelector('#response').textContent`);
+assert(positiveResponse.includes('Wonderful'), 'Valentine positive response is keyboard actionable and updates the live region');
+await evaluate(`document.querySelector('#secondary').click()`);
+const secondaryResponse = await evaluate(`document.querySelector('#response').textContent`);
+assert(secondaryResponse.includes('No pressure'), 'Valentine secondary response remains pointer actionable and updates the live region');
+
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await navigate('assets/templates/greeting-cards/birthday-card-template.html');
+const birthdayReduced = await evaluate(`parseFloat(getComputedStyle(document.querySelector('.cover')).transitionDuration) <= 0.001`);
+assert(birthdayReduced, 'Birthday template respects reduced-motion preferences');
+await navigate('assets/templates/greeting-cards/valentine-card-template.html');
+const valentineReduced = await evaluate(`parseFloat(getComputedStyle(document.querySelector('#positive')).transitionDuration) <= 0.001`);
+assert(valentineReduced, 'Valentine template respects reduced-motion preferences');
+await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
 
 await navigate('resources.html');
 const resourceHub = await evaluate(`(() => {
@@ -401,7 +486,7 @@ const workContent = await evaluate(`(() => {
   };
 })()`);
 assert(workContent.featured.join('|') === 'Generative A.I — Industrial Automation|Sticky Notes Capstone|WonderCubs Studio — In Development', 'Featured Work uses the specified order and status');
-assert(workContent.recent.join('|') === 'SNA Cleaning Services|AJ Air Systems|Lee’s Nail It Salon|Ultimate Liquors|Cay Accessories|D’vine Funeral Home|Valentine’s Cards', 'Recent Projects uses the specified seven-project order');
+assert(workContent.recent.join('|') === 'SNA Cleaning Services|AJ Air Systems|Lee’s Nail It Salon|Ultimate Liquors|Cay Accessories|D’vine Funeral Home|Valentine Card Template|Birthday Flip Card Template', 'Recent Projects preserves six independent concepts followed by the two reusable greeting templates');
 assert(workContent.software.join('|') === 'Invoice Generator|Quote Generator|Job Card Generator|WhatsApp Order Builder', 'Software & Automation contains all four working browser tools in order');
 assert(workContent.jobCardLink === 'Open Live Tool ↗' && /Job Card Generator/.test(workContent.jobCardImage), 'Job Card Work card uses the correct local tool link and meaningful screenshot alt text');
 assert(workContent.orderBuilderLink === 'Open Live Tool ↗' && /WhatsApp Order Builder/.test(workContent.orderBuilderImage), 'WhatsApp Order Builder Work card uses the correct local tool link and meaningful screenshot alt text');
