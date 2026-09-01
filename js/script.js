@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const dismissLoader = () => revealPage(loader);
       const safetyTimeout = window.setTimeout(dismissLoader, 2500);
-      const delay = reduceMotion ? 0 : 1800;
+      const delay = reduceMotion ? 0 : 1000;
       window.setTimeout(() => {
         window.clearTimeout(safetyTimeout);
         dismissLoader();
@@ -119,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'index.html', 'about.html', 'services.html', 'work.html',
     'resources.html', 'process.html', 'contact.html'
   ]);
+  let navigationTimer = null;
 
   document.addEventListener('click', (event) => {
     const link = event.target.closest('a');
@@ -138,15 +139,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!internalPages.has(pageName)) return;
     if (destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash) return;
     if (reduceMotion) return;
+    if (navigationTimer !== null) return;
 
     event.preventDefault();
     root.classList.add('page-leaving');
     root.classList.remove('page-ready');
-    window.setTimeout(() => window.location.assign(destination.href), 180);
+    navigationTimer = window.setTimeout(() => {
+      navigationTimer = null;
+      window.location.assign(destination.href);
+    }, 180);
   });
 
   // A page restored from the back/forward cache should be usable immediately.
   window.addEventListener('pageshow', () => {
+    if (navigationTimer !== null) window.clearTimeout(navigationTimer);
+    navigationTimer = null;
     root.classList.remove('page-leaving');
     root.classList.add('page-ready');
   });

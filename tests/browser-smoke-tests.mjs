@@ -545,28 +545,59 @@ const reducedMotion = await evaluate(`(() => {
 assert(reducedMotion.revealOpacity === '1' && reducedMotion.revealTransform === 'none' && reducedMotion.revealDuration <= 0.001 && (reducedMotion.loaderHidden || (reducedMotion.loaderPresent && reducedMotion.logoAnimation === 'none' && reducedMotion.logoOpacity === '1')), 'Reduced-motion mode keeps reveal content visible without motion and disables loader animation');
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
 
-await navigate('resources.html');
-const linkIntegrity = await evaluate(`(() => {
-  const allLinks = [...document.querySelectorAll('a[href]')].filter((link) => !link.closest('.site-loader'));
-  const downloadable = allLinks.filter((link) => link.hasAttribute('download'));
-  const external = allLinks.filter((link) => link.href.startsWith('http://') || link.href.startsWith('https://'));
-  const mailto = allLinks.filter((link) => link.href.startsWith('mailto:'));
-  const tel = allLinks.filter((link) => link.href.startsWith('tel:'));
-  const whatsapp = document.querySelector('.whatsapp-button[href^="https://wa.me/"]');
-  const anchors = allLinks.filter((link) => link.getAttribute('href') && link.getAttribute('href').startsWith('#'));
-  const newTab = allLinks.filter((link) => link.target === '_blank');
+await navigate('index.html');
+const linkBehaviour = await evaluate(`(() => {
+  const originalSetTimeout = window.setTimeout;
+  const originalClearTimeout = window.clearTimeout;
+  const scheduled = [];
+  window.setTimeout = (callback, delay) => {
+    scheduled.push({ callback, delay });
+    return scheduled.length;
+  };
+  window.clearTimeout = () => {};
+  const makeLink = (href, attributes = {}) => {
+    const link = document.createElement('a');
+    link.href = href;
+    Object.entries(attributes).forEach(([name, value]) => link.setAttribute(name, value));
+    link.textContent = 'test link';
+    document.body.append(link);
+    return link;
+  };
+  const dispatch = (link, options = {}) => {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...options });
+    link.dispatchEvent(event);
+    link.remove();
+    return event.defaultPrevented;
+  };
+  const eligible = makeLink('about.html');
+  const firstEligiblePrevented = dispatch(eligible);
+  const firstEligibleTransitioned = document.documentElement.classList.contains('page-leaving');
+  const secondEligiblePrevented = dispatch(makeLink('services.html'));
+  const excluded = [
+    dispatch(makeLink('assets/resources/python/static_site_scaffold.py', { download: '' })),
+    dispatch(makeLink('#main')),
+    dispatch(makeLink('https://example.com/')),
+    dispatch(makeLink('mailto:test@example.com')),
+    dispatch(makeLink('tel:+27123456789')),
+    dispatch(makeLink('https://wa.me/27843252262')),
+    dispatch(makeLink('contact.html', { target: '_blank' })),
+    dispatch(makeLink('work.html'), { ctrlKey: true })
+  ];
+  window.setTimeout = originalSetTimeout;
+  window.clearTimeout = originalClearTimeout;
+  document.documentElement.classList.remove('page-leaving');
+  document.documentElement.classList.add('page-ready');
   return {
-    downloads: downloadable.length,
-    external: external.length,
-    mailto: mailto.length,
-    tel: tel.length,
-    whatsapp: Boolean(whatsapp),
-    anchors: anchors.length,
-    newTab: newTab.length,
-    noIntercept: allLinks.every((link) => !link.dataset.preventDefault && !link.onclick && !link.hasAttribute('onclick'))
+    firstEligiblePrevented,
+    firstEligibleTransitioned,
+    secondEligiblePrevented,
+    scheduledDelays: scheduled.map(({ delay }) => delay),
+    excluded
   };
 })()`);
-assert(linkIntegrity.downloads >= 1 && linkIntegrity.external >= 1 && linkIntegrity.mailto >= 1 && linkIntegrity.tel >= 1 && linkIntegrity.whatsapp && linkIntegrity.anchors >= 1 && linkIntegrity.newTab >= 1 && linkIntegrity.noIntercept, 'Downloads, external links, WhatsApp, email, phone, anchor and new-tab links remain un-intercepted');
+assert(linkBehaviour.firstEligiblePrevented && linkBehaviour.firstEligibleTransitioned && linkBehaviour.scheduledDelays.length === 1 && linkBehaviour.scheduledDelays[0] === 180, 'Eligible primary-page clicks are prevented and enter a 180ms transition');
+assert(!linkBehaviour.secondEligiblePrevented && linkBehaviour.scheduledDelays.length === 1, 'Rapid repeated primary-page clicks schedule only one navigation');
+assert(linkBehaviour.excluded.every((prevented) => !prevented), 'Downloads, anchors, external, mailto, tel, WhatsApp, new-tab and modified clicks are not prevented');
 
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
 await navigate('assets/quote_generator.html');
