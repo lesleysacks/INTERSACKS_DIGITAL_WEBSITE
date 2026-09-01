@@ -500,6 +500,7 @@ const storageFailureState = await evaluate(`(() => ({
 assert(storageFailureState.pageReady && storageFailureState.contentVisible, 'SessionStorage failure does not break the homepage');
 
 await send('Page.addScriptToEvaluateOnNewDocument', { source: 'Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => window.__sessionStorageFallback__ || (window.__sessionStorageFallback__ = { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} }) });' });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: '(() => { const originalSetTimeout = window.setTimeout; window.setTimeout = (callback, delay, ...args) => delay === 1000 ? 0 : originalSetTimeout(callback, delay, ...args); originalSetTimeout(() => { window.setTimeout = originalSetTimeout; }, 3000); })();' });
 await evaluate(`(() => {
   try {
     const storage = window.sessionStorage;
@@ -507,12 +508,16 @@ await evaluate(`(() => {
   } catch (error) { }
 })()`);
 await navigate('index.html');
-await sleep(2600);
+const beforeSafetyTimeout = await evaluate(`(() => ({
+  loaderPresent: Boolean(document.querySelector('#site-loader')),
+  loaderHidden: !document.querySelector('#site-loader') || document.querySelector('#site-loader').hasAttribute('hidden')
+}))()`);
+await sleep(3100);
 const safetyTimeoutState = await evaluate(`(() => ({
   pageReady: document.documentElement.classList.contains('page-ready'),
   loaderHidden: !document.querySelector('#site-loader') || document.querySelector('#site-loader').hasAttribute('hidden')
 }))()`);
-assert(safetyTimeoutState.pageReady && safetyTimeoutState.loaderHidden, 'Safety timeout releases the page without leaving it inert');
+assert(beforeSafetyTimeout.loaderPresent && !beforeSafetyTimeout.loaderHidden && safetyTimeoutState.pageReady && safetyTimeoutState.loaderHidden, 'Safety timeout releases the page without leaving it inert');
 
 await send('Emulation.setScriptExecutionDisabled', { value: true });
 await navigate('index.html');
@@ -596,7 +601,7 @@ const linkBehaviour = await evaluate(`(() => {
   };
 })()`);
 assert(linkBehaviour.firstEligiblePrevented && linkBehaviour.firstEligibleTransitioned && linkBehaviour.scheduledDelays.length === 1 && linkBehaviour.scheduledDelays[0] === 180, 'Eligible primary-page clicks are prevented and enter a 180ms transition');
-assert(!linkBehaviour.secondEligiblePrevented && linkBehaviour.scheduledDelays.length === 1, 'Rapid repeated primary-page clicks schedule only one navigation');
+assert(linkBehaviour.secondEligiblePrevented && linkBehaviour.scheduledDelays.length === 1, 'Rapid repeated primary-page clicks are prevented and schedule only one navigation');
 assert(linkBehaviour.excluded.every((prevented) => !prevented), 'Downloads, anchors, external, mailto, tel, WhatsApp, new-tab and modified clicks are not prevented');
 
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });

@@ -139,7 +139,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!internalPages.has(pageName)) return;
     if (destination.pathname === window.location.pathname && destination.search === window.location.search && destination.hash) return;
     if (reduceMotion) return;
-    if (navigationTimer !== null) return;
+    if (navigationTimer !== null) {
+      event.preventDefault();
+      return;
+    }
 
     event.preventDefault();
     root.classList.add('page-leaving');
