@@ -409,6 +409,116 @@ assert(resourceHub.restoredCount === resourceHub.cardCount, 'Resource Hub reset 
 assert(resourceHub.downloads === 5, 'Resource Hub provides three Python and two planning downloads');
 assert(resourceHub.copyControls >= 9 && resourceHub.hasLiveStatus, 'Resource Hub copy controls provide accessible status feedback');
 
+await evaluate(`(() => {
+  try {
+    const storage = window.sessionStorage;
+    if (storage && typeof storage.clear === 'function') storage.clear();
+  } catch (error) { }
+})()`);
+await navigate('index.html');
+const loaderChecks = await evaluate(`(() => {
+  const loader = document.querySelector('#site-loader');
+  const logo = loader && loader.querySelector('.site-loader-logo');
+  const name = loader && loader.querySelector('.site-loader-name');
+  const progress = loader && loader.querySelector('.site-loader-progress');
+  return {
+    loaderPresent: Boolean(loader),
+    loaderLogo: Boolean(logo),
+    logoSource: logo ? new URL(logo.getAttribute('src'), window.location.href).pathname.endsWith('/favicon.svg') : false,
+    logoAlt: logo ? logo.getAttribute('alt') : '',
+    logoAriaHidden: logo ? logo.getAttribute('aria-hidden') : '',
+    logoWidth: logo ? Number.parseInt(logo.getAttribute('width'), 10) : 0,
+    logoHeight: logo ? Number.parseInt(logo.getAttribute('height'), 10) : 0,
+    logoNaturalWidth: logo ? logo.naturalWidth : 0,
+    logoNaturalHeight: logo ? logo.naturalHeight : 0,
+    oldMarkAbsent: !document.querySelector('.site-loader-mark'),
+    labelVisible: Boolean(name && name.textContent.trim()),
+    progressVisible: Boolean(progress),
+    pageReady: document.documentElement.classList.contains('page-ready')
+  };
+})()`);
+assert(loaderChecks.loaderPresent && loaderChecks.loaderLogo && loaderChecks.logoSource, 'Homepage loader uses favicon.svg');
+assert(loaderChecks.oldMarkAbsent, 'Text-based homepage loader mark is removed');
+assert(loaderChecks.logoAlt === '' && loaderChecks.logoAriaHidden === 'true', 'Loader logo uses empty alt text and aria-hidden');
+assert(loaderChecks.logoWidth > 0 && loaderChecks.logoHeight > 0 && loaderChecks.logoNaturalWidth > 0 && loaderChecks.logoNaturalHeight > 0, 'Loader logo has positive dimensions');
+assert(loaderChecks.labelVisible && loaderChecks.progressVisible, 'Loader exposes visible label text and progress indicator');
+assert(loaderChecks.pageReady, 'Homepage is revealed once the loader has initialized');
+
+await evaluate(`(() => {
+  try {
+    const storage = window.sessionStorage;
+    if (storage && typeof storage.clear === 'function') storage.clear();
+  } catch (error) { }
+})()`);
+await navigate('index.html');
+const initialLoaderState = await evaluate(`(() => {
+  const loader = document.querySelector('#site-loader');
+  return loader ? {
+    display: getComputedStyle(loader).display,
+    visibility: getComputedStyle(loader).visibility,
+    opacity: getComputedStyle(loader).opacity,
+    pageReady: document.documentElement.classList.contains('page-ready')
+  } : null;
+})()`);
+assert(initialLoaderState && initialLoaderState.display !== 'none' && initialLoaderState.visibility === 'visible', 'First homepage visit shows the loader');
+await sleep(2100);
+const dismissedLoaderState = await evaluate(`(() => {
+  const loader = document.querySelector('#site-loader');
+  return loader ? {
+    hidden: loader.hasAttribute('hidden'),
+    classHidden: loader.classList.contains('is-hidden'),
+    visibility: getComputedStyle(loader).visibility,
+    opacity: getComputedStyle(loader).opacity,
+    pageReady: document.documentElement.classList.contains('page-ready')
+  } : { removed: true, pageReady: document.documentElement.classList.contains('page-ready') };
+})()`);
+assert(dismissedLoaderState && (dismissedLoaderState.hidden || dismissedLoaderState.classHidden || dismissedLoaderState.opacity === '0' || dismissedLoaderState.visibility === 'hidden' || dismissedLoaderState.removed) && dismissedLoaderState.pageReady, 'First visit dismisses the loader and reveals the page');
+
+await evaluate(`(() => {
+  try {
+    const storage = window.sessionStorage;
+    if (storage && typeof storage.setItem === 'function') storage.setItem('intersacks-loader-shown', 'true');
+  } catch (error) { }
+})()`);
+await navigate('index.html');
+const secondVisitLoaderState = await evaluate(`(() => {
+  const loader = document.querySelector('#site-loader');
+  return {
+    missing: !loader,
+    pageReady: document.documentElement.classList.contains('page-ready'),
+    sessionState: window.sessionStorage.getItem('intersacks-loader-shown')
+  };
+})()`);
+assert(secondVisitLoaderState.missing && secondVisitLoaderState.pageReady && secondVisitLoaderState.sessionState === 'true', 'Second homepage visit in the same session skips the loader');
+
+await send('Page.addScriptToEvaluateOnNewDocument', { source: 'Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => { throw new Error("sessionStorage unavailable"); } });' });
+await navigate('index.html');
+const storageFailureState = await evaluate(`(() => ({
+  pageReady: document.documentElement.classList.contains('page-ready'),
+  contentVisible: getComputedStyle(document.querySelector('main')).opacity !== '0'
+}))()`);
+assert(storageFailureState.pageReady && storageFailureState.contentVisible, 'SessionStorage failure does not break the homepage');
+
+await send('Page.addScriptToEvaluateOnNewDocument', { source: 'Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => window.__sessionStorageFallback__ || (window.__sessionStorageFallback__ = { getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} }) });' });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: '(() => { const originalSetTimeout = window.setTimeout; window.setTimeout = (callback, delay, ...args) => delay === 1000 ? 0 : originalSetTimeout(callback, delay, ...args); originalSetTimeout(() => { window.setTimeout = originalSetTimeout; }, 3000); })();' });
+await evaluate(`(() => {
+  try {
+    const storage = window.sessionStorage;
+    if (storage && typeof storage.clear === 'function') storage.clear();
+  } catch (error) { }
+})()`);
+await navigate('index.html');
+const beforeSafetyTimeout = await evaluate(`(() => ({
+  loaderPresent: Boolean(document.querySelector('#site-loader')),
+  loaderHidden: !document.querySelector('#site-loader') || document.querySelector('#site-loader').hasAttribute('hidden')
+}))()`);
+await sleep(3100);
+const safetyTimeoutState = await evaluate(`(() => ({
+  pageReady: document.documentElement.classList.contains('page-ready'),
+  loaderHidden: !document.querySelector('#site-loader') || document.querySelector('#site-loader').hasAttribute('hidden')
+}))()`);
+assert(beforeSafetyTimeout.loaderPresent && !beforeSafetyTimeout.loaderHidden && safetyTimeoutState.pageReady && safetyTimeoutState.loaderHidden, 'Safety timeout releases the page without leaving it inert');
+
 await send('Emulation.setScriptExecutionDisabled', { value: true });
 await navigate('index.html');
 const noScriptReveal = await evaluate(`(() => {
@@ -419,13 +529,80 @@ assert(noScriptReveal, 'Reveal content remains visible when JavaScript is disabl
 await send('Emulation.setScriptExecutionDisabled', { value: false });
 
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+await send('Page.addScriptToEvaluateOnNewDocument', { source: 'Object.defineProperty(window, "sessionStorage", { configurable: true, get: () => ({ getItem: () => null, setItem: () => {}, removeItem: () => {}, clear: () => {} }) });' });
 await navigate('index.html');
 const reducedMotion = await evaluate(`(() => {
-  const style = getComputedStyle(document.querySelector('.reveal'));
-  return style.opacity === '1' && style.transform === 'none' && parseFloat(style.transitionDuration) <= 0.001;
+  const loader = document.querySelector('#site-loader');
+  const reveal = document.querySelector('.reveal');
+  const loaderLogo = loader && loader.querySelector('.site-loader-logo');
+  const revealStyle = getComputedStyle(reveal);
+  const loaderStyle = loaderLogo ? getComputedStyle(loaderLogo) : null;
+  return {
+    loaderPresent: Boolean(loader),
+    loaderHidden: !loader || loader.hasAttribute('hidden') || getComputedStyle(loader).visibility === 'hidden' || getComputedStyle(loader).opacity === '0',
+    revealOpacity: revealStyle.opacity,
+    revealTransform: revealStyle.transform,
+    revealDuration: parseFloat(revealStyle.transitionDuration),
+    logoAnimation: loaderStyle ? loaderStyle.animationName : 'not-applicable',
+    logoOpacity: loaderStyle ? loaderStyle.opacity : 'not-applicable'
+  };
 })()`);
-assert(reducedMotion, 'Reduced-motion mode keeps reveal content visible without motion');
+assert(reducedMotion.revealOpacity === '1' && reducedMotion.revealTransform === 'none' && reducedMotion.revealDuration <= 0.001 && (reducedMotion.loaderHidden || (reducedMotion.loaderPresent && reducedMotion.logoAnimation === 'none' && reducedMotion.logoOpacity === '1')), 'Reduced-motion mode keeps reveal content visible without motion and disables loader animation');
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
+
+await navigate('index.html');
+const linkBehaviour = await evaluate(`(() => {
+  const originalSetTimeout = window.setTimeout;
+  const originalClearTimeout = window.clearTimeout;
+  const scheduled = [];
+  window.setTimeout = (callback, delay) => {
+    scheduled.push({ callback, delay });
+    return scheduled.length;
+  };
+  window.clearTimeout = () => {};
+  const makeLink = (href, attributes = {}) => {
+    const link = document.createElement('a');
+    link.href = href;
+    Object.entries(attributes).forEach(([name, value]) => link.setAttribute(name, value));
+    link.textContent = 'test link';
+    document.body.append(link);
+    return link;
+  };
+  const dispatch = (link, options = {}) => {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, ...options });
+    link.dispatchEvent(event);
+    link.remove();
+    return event.defaultPrevented;
+  };
+  const eligible = makeLink('about.html');
+  const firstEligiblePrevented = dispatch(eligible);
+  const firstEligibleTransitioned = document.documentElement.classList.contains('page-leaving');
+  const secondEligiblePrevented = dispatch(makeLink('services.html'));
+  const excluded = [
+    dispatch(makeLink('assets/resources/python/static_site_scaffold.py', { download: '' })),
+    dispatch(makeLink('#main')),
+    dispatch(makeLink('https://example.com/')),
+    dispatch(makeLink('mailto:test@example.com')),
+    dispatch(makeLink('tel:+27123456789')),
+    dispatch(makeLink('https://wa.me/27843252262')),
+    dispatch(makeLink('contact.html', { target: '_blank' })),
+    dispatch(makeLink('work.html'), { ctrlKey: true })
+  ];
+  window.setTimeout = originalSetTimeout;
+  window.clearTimeout = originalClearTimeout;
+  document.documentElement.classList.remove('page-leaving');
+  document.documentElement.classList.add('page-ready');
+  return {
+    firstEligiblePrevented,
+    firstEligibleTransitioned,
+    secondEligiblePrevented,
+    scheduledDelays: scheduled.map(({ delay }) => delay),
+    excluded
+  };
+})()`);
+assert(linkBehaviour.firstEligiblePrevented && linkBehaviour.firstEligibleTransitioned && linkBehaviour.scheduledDelays.length === 1 && linkBehaviour.scheduledDelays[0] === 180, 'Eligible primary-page clicks are prevented and enter a 180ms transition');
+assert(linkBehaviour.secondEligiblePrevented && linkBehaviour.scheduledDelays.length === 1, 'Rapid repeated primary-page clicks are prevented and schedule only one navigation');
+assert(linkBehaviour.excluded.every((prevented) => !prevented), 'Downloads, anchors, external, mailto, tel, WhatsApp, new-tab and modified clicks are not prevented');
 
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
 await navigate('assets/quote_generator.html');
