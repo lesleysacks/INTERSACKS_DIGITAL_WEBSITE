@@ -80,7 +80,7 @@ const on = (method, listener) => {
 const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const evaluate = async (expression) => {
   const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || 'Browser evaluation failed');
+  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || 'Browser evaluation failed');
   return result.result.value;
 };
 
@@ -131,11 +131,19 @@ for (const width of widths) {
     const result = await evaluate(`(() => {
       const ids = [...document.querySelectorAll('[id]')].map((element) => element.id);
       const duplicateIds = ids.filter((id, index) => ids.indexOf(id) !== index);
+      const hasLegacyBodyOpacityRule = [...document.styleSheets].some((sheet) => {
+        try {
+          return [...sheet.cssRules].some((rule) => rule.selectorText === '.js body>:not(.site-loader)');
+        } catch (error) {
+          return false;
+        }
+      });
       return {
         overflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         duplicateIds: [...new Set(duplicateIds)],
         nestedControls: document.querySelectorAll('a a, a button, button a, button button').length,
-        hasMain: Boolean(document.querySelector('main'))
+        hasMain: Boolean(document.querySelector('main')),
+        hasLegacyBodyOpacityRule
       };
     })()`);
 
@@ -143,6 +151,7 @@ for (const width of widths) {
     assert(result.duplicateIds.length === 0, `${page} has no duplicate IDs at ${width}px`);
     assert(result.nestedControls === 0, `${page} has no nested interactive controls at ${width}px`);
     assert(result.hasMain, `${page} has a main landmark at ${width}px`);
+    assert(!result.hasLegacyBodyOpacityRule, `${page} has no legacy direct-body opacity transition rule at ${width}px`);
     assert(pageErrors.length === 0, `${page} has no browser exceptions at ${width}px`);
     assert(failedResponses.length === 0, `${page} has no failed local asset responses at ${width}px`);
 
@@ -544,10 +553,11 @@ const reducedMotion = await evaluate(`(() => {
     revealTransform: revealStyle.transform,
     revealDuration: parseFloat(revealStyle.transitionDuration),
     logoAnimation: loaderStyle ? loaderStyle.animationName : 'not-applicable',
-    logoOpacity: loaderStyle ? loaderStyle.opacity : 'not-applicable'
+    logoOpacity: loaderStyle ? loaderStyle.opacity : 'not-applicable',
+    overlayTransitionDuration: parseFloat(getComputedStyle(document.documentElement, '::before').transitionDuration)
   };
 })()`);
-assert(reducedMotion.revealOpacity === '1' && reducedMotion.revealTransform === 'none' && reducedMotion.revealDuration <= 0.001 && (reducedMotion.loaderHidden || (reducedMotion.loaderPresent && reducedMotion.logoAnimation === 'none' && reducedMotion.logoOpacity === '1')), 'Reduced-motion mode keeps reveal content visible without motion and disables loader animation');
+assert(reducedMotion.revealOpacity === '1' && reducedMotion.revealTransform === 'none' && reducedMotion.revealDuration <= 0.001 && reducedMotion.overlayTransitionDuration <= 0.001 && (reducedMotion.loaderHidden || (reducedMotion.loaderPresent && reducedMotion.logoAnimation === 'none' && reducedMotion.logoOpacity === '1')), `Reduced-motion mode keeps reveal content visible without motion and disables loader animation: ${JSON.stringify(reducedMotion)}`);
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [] });
 
 await navigate('index.html');
@@ -577,6 +587,12 @@ const linkBehaviour = await evaluate(`(() => {
   const eligible = makeLink('about.html');
   const firstEligiblePrevented = dispatch(eligible);
   const firstEligibleTransitioned = document.documentElement.classList.contains('page-leaving');
+  const leavingMainOpacity = getComputedStyle(document.querySelector('main')).opacity;
+  const leavingOverlay = getComputedStyle(document.documentElement, '::before');
+  const loaderProbe = document.createElement('div');
+  loaderProbe.className = 'site-loader';
+  document.body.append(loaderProbe);
+  const loaderZIndex = getComputedStyle(loaderProbe).zIndex;
   const secondEligiblePrevented = dispatch(makeLink('services.html'));
   const excluded = [
     dispatch(makeLink('assets/resources/python/static_site_scaffold.py', { download: '' })),
@@ -588,21 +604,67 @@ const linkBehaviour = await evaluate(`(() => {
     dispatch(makeLink('contact.html', { target: '_blank' })),
     dispatch(makeLink('work.html'), { ctrlKey: true })
   ];
+  const leavingOverlayState = {
+    position: leavingOverlay.position,
+    inset: [leavingOverlay.top, leavingOverlay.right, leavingOverlay.bottom, leavingOverlay.left],
+    backgroundColor: leavingOverlay.backgroundColor,
+    backgroundImage: leavingOverlay.backgroundImage,
+    opacity: leavingOverlay.opacity,
+    visibility: leavingOverlay.visibility,
+    pointerEvents: leavingOverlay.pointerEvents,
+    transitionDuration: parseFloat(leavingOverlay.transitionDuration),
+    loaderZIndex
+  };
+  window.dispatchEvent(new Event('pageshow'));
+  const restoredLeaving = document.documentElement.classList.contains('page-leaving');
+  const restoredReady = document.documentElement.classList.contains('page-ready');
   window.setTimeout = originalSetTimeout;
   window.clearTimeout = originalClearTimeout;
-  document.documentElement.classList.remove('page-leaving');
-  document.documentElement.classList.add('page-ready');
   return {
     firstEligiblePrevented,
     firstEligibleTransitioned,
     secondEligiblePrevented,
     scheduledDelays: scheduled.map(({ delay }) => delay),
+    leavingMainOpacity,
+    leavingOverlay: leavingOverlayState,
+    restoredLeaving,
+    restoredReady,
     excluded
   };
 })()`);
 assert(linkBehaviour.firstEligiblePrevented && linkBehaviour.firstEligibleTransitioned && linkBehaviour.scheduledDelays.length === 1 && linkBehaviour.scheduledDelays[0] === 180, 'Eligible primary-page clicks are prevented and enter a 180ms transition');
 assert(linkBehaviour.secondEligiblePrevented && linkBehaviour.scheduledDelays.length === 1, 'Rapid repeated primary-page clicks are prevented and schedule only one navigation');
+assert(linkBehaviour.leavingMainOpacity === '1' && linkBehaviour.leavingOverlay.position === 'fixed' && linkBehaviour.leavingOverlay.inset.every((value) => value === '0px') && linkBehaviour.leavingOverlay.backgroundColor === 'rgb(8, 20, 35)' && linkBehaviour.leavingOverlay.backgroundImage.includes('/favicon.svg') && linkBehaviour.leavingOverlay.visibility === 'visible' && linkBehaviour.leavingOverlay.pointerEvents === 'none' && linkBehaviour.leavingOverlay.transitionDuration === 0.18, `Leaving state keeps content visible under the navy favicon overlay: ${JSON.stringify(linkBehaviour)}`);
+assert(Number(linkBehaviour.leavingOverlay.loaderZIndex) > 900, 'Homepage loader remains above the transition overlay');
 assert(linkBehaviour.excluded.every((prevented) => !prevented), 'Downloads, anchors, external, mailto, tel, WhatsApp, new-tab and modified clicks are not prevented');
+assert(!linkBehaviour.restoredLeaving && linkBehaviour.restoredReady, 'Back/forward pageshow restores a usable page state');
+
+await navigate('services.html');
+await evaluate(`(() => {
+  document.documentElement.classList.remove('page-ready');
+  document.documentElement.classList.add('page-leaving');
+  return true;
+})()`);
+await sleep(250);
+const leavingOverlay = await evaluate(`(() => {
+  const overlay = getComputedStyle(document.documentElement, '::before');
+  return { opacity: overlay.opacity, visibility: overlay.visibility };
+})()`);
+await evaluate(`(() => {
+  document.documentElement.classList.remove('page-leaving');
+  document.documentElement.classList.add('page-ready');
+  return true;
+})()`);
+await sleep(250);
+const readyOverlay = await evaluate(`(() => {
+  const ready = getComputedStyle(document.documentElement, '::before');
+  return {
+    opacity: ready.opacity,
+    visibility: ready.visibility,
+    pointerEvents: ready.pointerEvents
+  };
+})()`);
+assert(leavingOverlay.opacity === '1' && leavingOverlay.visibility === 'visible' && readyOverlay.opacity === '0' && readyOverlay.visibility === 'hidden' && readyOverlay.pointerEvents === 'none', `Page-ready fades the branded overlay away without hiding page content: ${JSON.stringify({ leavingOverlay, readyOverlay })}`);
 
 await send('Emulation.setEmulatedMedia', { media: 'screen', features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
 await navigate('assets/quote_generator.html');
