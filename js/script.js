@@ -1,36 +1,64 @@
 document.documentElement.classList.add('js');
 
+const HOMEPAGE_LOADER_KEY = 'intersacks-loader-shown';
+
+const isHomepage = () => {
+  const path = window.location.pathname.replace(/\/+$/, '');
+  return path === '' || path === '/' || /\/index\.html?$/i.test(path);
+};
+
+const revealPage = (loader) => {
+  const root = document.documentElement;
+  root.classList.add('page-ready');
+  if (!loader) {
+    return;
+  }
+
+  if (loader.classList.contains('is-hidden')) return;
+  loader.classList.add('is-hidden');
+  loader.setAttribute('aria-hidden', 'true');
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const removeDelay = reduceMotion ? 0 : 450;
+  window.setTimeout(() => {
+    loader.hidden = true;
+    loader.remove();
+  }, removeDelay);
+};
+
 document.addEventListener('DOMContentLoaded', () => {
   const root = document.documentElement;
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const loader = document.querySelector('#site-loader');
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const loader = document.getElementById('site-loader');
 
-  // Reveal normal pages immediately. The homepage waits for its branded loader.
-  if (loader) {
-    const pageElements = [...document.body.children].filter((element) => element !== loader);
-    let loaderDismissed = false;
+  if (loader && isHomepage()) {
+    let shouldShowLoader = true;
+    try {
+      shouldShowLoader = !(window.sessionStorage && window.sessionStorage.getItem(HOMEPAGE_LOADER_KEY) === 'true');
+    } catch (error) {
+      shouldShowLoader = true;
+    }
 
-    document.body.setAttribute('aria-busy', 'true');
-    pageElements.forEach((element) => { element.inert = true; });
-
-    const dismissLoader = () => {
-      if (loaderDismissed) return;
-      loaderDismissed = true;
-      window.clearTimeout(safetyTimeout);
-      document.body.removeAttribute('aria-busy');
-      pageElements.forEach((element) => { element.inert = false; });
+    if (!shouldShowLoader) {
+      loader.hidden = true;
+      loader.remove();
       root.classList.add('page-ready');
-      loader.classList.add('is-hidden');
-      loader.setAttribute('aria-hidden', 'true');
-      window.setTimeout(() => { loader.hidden = true; }, reduceMotion ? 0 : 500);
-    };
+    } else {
+      try {
+        window.sessionStorage.setItem(HOMEPAGE_LOADER_KEY, 'true');
+      } catch (error) {
+        // A blocked sessionStorage should not break the homepage.
+      }
 
-    const safetyTimeout = window.setTimeout(dismissLoader, 5000);
-    const dismissAfterLoad = () => window.setTimeout(dismissLoader, reduceMotion ? 0 : 300);
-    if (document.readyState === 'complete') dismissAfterLoad();
-    else window.addEventListener('load', dismissAfterLoad, { once: true });
+      const dismissLoader = () => revealPage(loader);
+      const safetyTimeout = window.setTimeout(dismissLoader, 2500);
+      const delay = reduceMotion ? 0 : 1800;
+      window.setTimeout(() => {
+        window.clearTimeout(safetyTimeout);
+        dismissLoader();
+      }, delay);
+    }
   } else {
-    window.requestAnimationFrame(() => root.classList.add('page-ready'));
+    root.classList.add('page-ready');
   }
 
   // Keep the compact mobile navigation accessible and predictable.

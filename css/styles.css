@@ -15,6 +15,8 @@
 box-sizing:border-box}
 html{
 scroll-behavior:smooth}
+html,body{
+overflow-x:hidden}
 body{
 margin:0;
 background:var(--cream);
@@ -55,13 +57,18 @@ display:flex;
 flex-direction:column;
 align-items:center;
 text-align:center}
-.site-loader-mark{
-font-family:var(--serif);
-font-size:clamp(88px,15vw,142px);
-font-weight:600;
-line-height:.9;
-letter-spacing:-10px;
-transform:translateX(-5px)}
+.site-loader-logo{
+width:clamp(96px,14vw,132px);
+height:auto;
+aspect-ratio:1;
+display:block;
+object-fit:contain;
+opacity:.82;
+transform:scale(.96);
+animation:site-loader-logo 1.4s ease-in-out infinite alternate}
+@keyframes site-loader-logo{
+0%{opacity:.72;transform:scale(.96)}
+100%{opacity:1;transform:scale(1)}}
 .site-loader-name{
 margin-top:24px;
 font-family:var(--font);
@@ -90,6 +97,10 @@ animation:site-loader-progress 1.6s ease-in-out infinite}
 @media(prefers-reduced-motion:reduce){
 .js body>:not(.site-loader),.js .site-loader{
 transition:none}
+.site-loader-logo{
+animation:none;
+opacity:1;
+transform:none}
 .site-loader-progress span{
 animation:none;
 transform:scaleX(1)}}
