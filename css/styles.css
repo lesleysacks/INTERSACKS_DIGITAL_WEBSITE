@@ -22,14 +22,29 @@ color:var(--ink);
 font-family:var(--font);
 font-size:15px;
 line-height:1.7}
-/* Lightweight page entrance/exit states. Content remains visible without JS. */
-.js body>:not(.site-loader){
+/* Branded transition layer keeps the page background from flashing between navigations. */
+.js::before{
+content:"";
+position:fixed;
+inset:0;
+z-index:900;
+background-color:#081423;
+background-image:url("../favicon.svg");
+background-position:center;
+background-repeat:no-repeat;
+background-size:clamp(72px,14vw,120px);
+opacity:1;
+visibility:visible;
+pointer-events:none;
+transition:opacity .18s ease,visibility 0s linear .18s}
+.js.page-ready::before{
 opacity:0;
-transition:opacity .18s ease}
-.js.page-ready body>:not(.site-loader){
-opacity:1}
-.js.page-leaving body>:not(.site-loader){
-opacity:0}
+visibility:hidden;
+transition:opacity .18s ease,visibility 0s linear .18s}
+.js.page-leaving::before{
+opacity:1;
+visibility:visible;
+transition:opacity .18s ease,visibility 0s linear 0s}
 /* Homepage-only branded loading screen. It is hidden when JS is unavailable. */
 .site-loader{
 display:none}
@@ -93,7 +108,7 @@ animation:site-loader-progress 1.6s ease-in-out infinite}
 52%{transform:scaleX(1);transform-origin:right}
 100%{transform:scaleX(0);transform-origin:right}}
 @media(prefers-reduced-motion:reduce){
-.js body>:not(.site-loader),.js .site-loader{
+.js::before,.js.page-ready::before,.js.page-leaving::before,.js .site-loader{
 transition:none}
 .site-loader-logo{
 animation:none;
@@ -691,7 +706,9 @@ opacity:1;
 transform:none;
 transition:none}
 *{
-transition-duration:.01ms!important}
+transition-duration:0s!important;
+animation-duration:0s!important;
+animation-iteration-count:1!important}
 }
 @media(max-width:760px){
 .nav-shell{
