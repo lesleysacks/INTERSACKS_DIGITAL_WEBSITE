@@ -1,5 +1,5 @@
 (function () {
-  var MEASUREMENT_ID = 'G-Q85HJEHCZ7';
+  var MEASUREMENT_ID = 'G-XCN1MN0GHR';
   var PRODUCTION_HOSTS = {
     'www.intersacks.co.za': true,
     'intersacks.co.za': true
