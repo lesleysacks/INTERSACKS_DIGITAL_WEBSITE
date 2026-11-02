@@ -37,6 +37,8 @@ In GA4: Admin, Data display, Events. Wait until the event appears, then turn on 
 
 The tag does not receive names, email addresses, telephone numbers, WhatsApp numbers, or enquiry text. `page_path` is the path only, without a query string.
 
-No consent banner was added. A banner that did not actually control the tag would be misleading. On the production host, the Google tag can set its usual analytics cookies. GA4 does not provide a precise location from the full IP address in reporting. The business still needs a lawful basis under POPIA for this measurement. If a consent requirement is adopted later, load the tag through Google Consent Mode instead of adding a notice that does not change what is collected.
+The public notice is `privacy.html`, linked from the site footer and from the four browser tools. It describes the measurement, the custom events, the enquiry details that are not sent, and how a visitor can delete or block cookies in the browser. It does not name a lawful basis under POPIA, and it does not claim the tag is switched off.
+
+No consent banner was added. A banner that did not actually control the tag would be misleading. On the production host, the Google tag can set its usual analytics cookies and sends technical data, including the IP address, to Google. The business still needs a lawful basis under POPIA for this measurement. If a consent requirement is adopted later, load the tag through Google Consent Mode instead of adding a notice that does not change what is collected.
 
 Pages that are not indexable, including the payments notice, the 404 page, and the greeting-card templates, do not load this file.

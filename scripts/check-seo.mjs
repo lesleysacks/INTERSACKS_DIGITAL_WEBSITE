@@ -14,7 +14,8 @@ const primary = [
   'work.html',
   'process.html',
   'contact.html',
-  'resources.html'
+  'resources.html',
+  'privacy.html'
 ];
 const tools = [
   'assets/invoice_generator.html',
@@ -95,7 +96,8 @@ if (/Disallow:\s*\/\s*$/m.test(robots)) fail('robots.txt blocks the whole site')
 
 const sitemap = read('sitemap.xml');
 const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
-if (locs.length !== 11) fail(`sitemap has ${locs.length} URLs`);
+if (locs.length !== 12) fail(`sitemap has ${locs.length} URLs`);
+if (!locs.includes('https://www.intersacks.co.za/privacy.html')) fail('sitemap is missing the privacy page');
 if (locs.some((loc) => loc.includes('payments.html') || loc.includes('404'))) fail('sitemap includes a noindex page');
 for (const loc of locs) {
   if (!loc.startsWith('https://www.intersacks.co.za/')) fail(`sitemap URL is off-domain: ${loc}`);
@@ -106,6 +108,34 @@ for (const loc of locs) {
 const enquiry = read('js/script.js');
 if (!enquiry.includes('mailto:lesleysacks1@gmail.com?subject=')) fail('enquiry handoff no longer emails the existing recipient');
 if (/script\.google|apps script|spreadsheet/i.test(enquiry)) fail('enquiry script gained an unexpected endpoint');
+if (enquiry.includes('privacy.html')) fail('privacy.html was added to the page-transition list');
+
+const privacy = read('privacy.html');
+for (const phrase of [
+  'G-Q85HJEHCZ7',
+  'Google Analytics 4',
+  'whatsapp_click',
+  'email_click',
+  'phone_click',
+  'quote_request_click',
+  'service_view',
+  'contact_page_view',
+  'lesleysacks1@gmail.com',
+  'https://policies.google.com/privacy',
+  'https://policies.google.com/technologies/cookies'
+]) {
+  if (!privacy.includes(phrase)) fail(`privacy.html is missing ${phrase}`);
+}
+if (/lawful basis|we comply|POPIA compliant|cookies are disabled|consent mode/i.test(privacy)) fail('privacy.html states a legal basis or a consent control');
+for (const file of ['index.html', 'about.html', 'services.html', 'work.html', 'process.html', 'contact.html', 'resources.html', '404.html', 'payments.html', 'privacy.html']) {
+  if (!read(file).includes('href="privacy.html"')) fail(`${file} is missing the privacy link`);
+}
+for (const file of tools) {
+  if (!read(file).includes('href="../privacy.html"')) fail(`${file} is missing the privacy link`);
+}
+if (!read('assets/quote_generator.html').includes('Your quote information stays in this browser session and is not uploaded by InterSacks Digital.')) fail('quote tool notice changed');
+if (!read('assets/job_card_generator.html').includes('Your job card information stays in this browser session and is not uploaded by InterSacks Digital.')) fail('job card tool notice changed');
+if (!read('assets/whatsapp_order_builder.html').includes('Order information remains in this browser session')) fail('order tool notice changed');
 
 if (failures.length) {
   console.error(failures.join('\n'));

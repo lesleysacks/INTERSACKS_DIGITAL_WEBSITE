@@ -38,6 +38,7 @@ const evaluate = async (expression) => {
 
 await send('Page.enable');
 await send('Network.enable');
+await send('Network.setCacheDisabled', { cacheDisabled: true });
 const requests = [];
 socket.addEventListener('message', (event) => {
   const message = JSON.parse(event.data);
@@ -58,6 +59,8 @@ const click = (selector) => evaluate(`(() => { const link = document.querySelect
 await goto('index.html');
 const home = await evaluate(`(() => ({ scripts: document.querySelectorAll('script[src="js/analytics.js"]').length, id: ${JSON.stringify('G-Q85HJEHCZ7')} }))()`);
 if (home.scripts !== 1) fail(`Homepage loads analytics ${home.scripts} times`);
+const homePrivacy = await evaluate(`!!document.querySelector('footer a[href="privacy.html"]')`);
+if (!homePrivacy) fail('Homepage footer is missing the privacy link');
 if (requests.some((url) => url.includes('googletagmanager.com'))) fail('Local homepage requested the production Google tag');
 
 const quoteClicked = await click('section.contact a.button.button-gold[href="contact.html"]');
@@ -118,18 +121,31 @@ await evaluate(`(() => { const link = [...document.querySelectorAll('a')].find((
 const processQuotes = (await events()).filter((event) => event.name === 'quote_request_click');
 if (processQuotes.length !== 1 || processQuotes[0].params.link_location !== 'page') fail(`Process quote event was ${JSON.stringify(processQuotes)}`);
 
-const pages = ['about.html', 'work.html', 'process.html', 'resources.html', 'assets/invoice_generator.html', 'assets/quote_generator.html', 'assets/job_card_generator.html', 'assets/whatsapp_order_builder.html'];
+const pages = ['about.html', 'work.html', 'process.html', 'resources.html', 'privacy.html', 'assets/invoice_generator.html', 'assets/quote_generator.html', 'assets/job_card_generator.html', 'assets/whatsapp_order_builder.html'];
 for (const page of pages) {
   await goto(page);
   const src = page.startsWith('assets/') ? '../js/analytics.js' : 'js/analytics.js';
   const count = await evaluate(`document.querySelectorAll(${JSON.stringify(`script[src="${src}"]`)}).length`);
   if (count !== 1) fail(`${page} loaded analytics ${count} times`);
   if (requests.some((url) => url.includes('googletagmanager.com'))) fail(`${page} requested the production Google tag locally`);
+  if (page.startsWith('assets/')) {
+    const linked = await evaluate(`!!document.querySelector('a.back-link[href="../privacy.html"]')`);
+    if (!linked) fail(`${page} is missing the privacy link`);
+  }
 }
+await goto('privacy.html');
+const privacyText = await evaluate('document.body.innerText');
+if (!privacyText.includes('G-Q85HJEHCZ7') || !privacyText.includes('lesleysacks1@gmail.com')) fail('Privacy page is missing the measurement or contact details');
+if (/lawful basis|we comply|cookies are disabled/i.test(privacyText)) fail('Privacy page states a legal basis or says cookies are disabled');
+await evaluate(`(() => { document.addEventListener('click', (event) => { const link = event.target.closest && event.target.closest('a[href="privacy.html"]'); if (link) event.preventDefault(); }, true); const link = document.querySelector('footer a[href="privacy.html"]'); link.click(); return true; })()`);
+const privacyClick = await events();
+if (privacyClick.some((event) => event.name === 'quote_request_click')) fail('The privacy link was tracked as a quote request');
 for (const page of ['payments.html', '404.html']) {
   await goto(page);
   const count = await evaluate('document.querySelectorAll(\'script[src*="analytics.js"]\').length');
   if (count !== 0) fail(`${page} should not load analytics`);
+  const linked = await evaluate(`(() => ({ ok: !!document.querySelector('footer a[href="privacy.html"]'), href: location.href, hasFooter: !!document.querySelector('footer') }))()`);
+  if (!linked.ok) fail(`${page} is missing the privacy link (${linked.href}, footer ${linked.hasFooter})`);
 }
 
 socket.close();

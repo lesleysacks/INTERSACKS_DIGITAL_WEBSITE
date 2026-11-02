@@ -684,7 +684,9 @@ color:var(--gold)}
 padding-top:19px;
 border-top:1px solid rgba(255,255,255,.13);
 display:flex;
+flex-wrap:wrap;
 justify-content:space-between;
+gap:8px 16px;
 color:#7e878f;
 font-size:9px;
 letter-spacing:1px;
@@ -1654,3 +1656,20 @@ display:flex;
 flex-wrap:wrap;
 gap:12px;
 margin-top:28px}
+.privacy-copy{
+max-width:760px}
+.privacy-copy h2{
+margin:34px 0 8px;
+font-family:var(--serif);
+font-size:clamp(28px,3vw,40px);
+font-weight:500;
+line-height:1.15}
+.privacy-copy p,.privacy-copy li{
+color:#3c4650;
+font-size:15px;
+line-height:1.8}
+.privacy-copy ul{
+margin:8px 0 0;
+padding-left:1.2em}
+.privacy-copy a{
+color:var(--gold-dark)}
