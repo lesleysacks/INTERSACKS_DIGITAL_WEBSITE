@@ -4,5 +4,9 @@
   "version": "1.0.0",
   "engines": {
     "node": "20.x"
+  },
+  "scripts": {
+    "test": "node --test tests/enquiry/apps-script.test.mjs tests/enquiry/proxy.test.mjs tests/enquiry/frontend.test.mjs",
+    "enquiry-server": "node server/enquiry-server.mjs"
   }
 }
