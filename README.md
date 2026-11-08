@@ -122,6 +122,10 @@ Works on all modern evergreen browsers with standard ES6+ and CSS variables:
 
 ---
 
+## Contact enquiries
+
+Website enquiries are saved through a server-side proxy and a standalone Google Apps Script web app. Setup, environment variables, and troubleshooting are in [docs/enquiry-integration.md](docs/enquiry-integration.md). Do not put the Apps Script URL or the proxy token in frontend code.
+
 ## 💎 Credits
 
 - **Fonts:** [Google Fonts](https://fonts.google.com/) (Syne & DM Sans)

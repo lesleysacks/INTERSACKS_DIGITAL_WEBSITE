@@ -29,6 +29,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
   <script src="js/analytics.js" defer></script>
+  <script src="js/enquiry-form.js" defer></script>
   <script src="js/script.js" defer></script>
 </head>
 <body>
@@ -60,13 +61,20 @@
         </div>
         <a class="text-link dark-link contact-whatsapp" href="https://wa.me/27843252262?text=Hello%20InterSacks%20Digital%2C%20I%20would%20like%20to%20start%20a%20project." target="_blank" rel="noopener noreferrer">Chat on WhatsApp <span>↗</span></a>
       </div>
-      <form class="contact-form reveal" id="contact-form">
-        <div class="form-row"><label>Full name<input type="text" name="name" autocomplete="name" required></label><label>Email address<input type="email" name="email" autocomplete="email" required></label></div>
-        <div class="form-row"><label>Business name<input type="text" name="business" autocomplete="organization"></label><label>Phone number<input type="tel" name="phone" autocomplete="tel"></label></div>
+      <form class="contact-form reveal" id="contact-form" method="post" action="contact.html" data-enquiry-endpoint="/api/enquiry" aria-describedby="form-status">
+        <div class="form-row"><label for="enquiry-name">Full name<input id="enquiry-name" type="text" name="name" autocomplete="name" maxlength="120" required></label><label for="enquiry-email">Email address<input id="enquiry-email" type="email" name="email" autocomplete="email" maxlength="254" required></label></div>
+        <div class="form-row"><label for="enquiry-business">Business name<input id="enquiry-business" type="text" name="business" autocomplete="organization" maxlength="160"></label><label for="enquiry-phone">Phone number<input id="enquiry-phone" type="tel" name="phone" autocomplete="tel" inputmode="tel" maxlength="40"></label></div>
         <fieldset><legend>What can we help with?</legend><div class="service-choice"><label><input type="radio" name="service" value="Web Solutions" required><span>Web Solutions</span></label><label><input type="radio" name="service" value="Branding"><span>Branding</span></label><label><input type="radio" name="service" value="Business Automation"><span>Automation</span></label><label><input type="radio" name="service" value="AI & Software"><span>AI & Software</span></label></div></fieldset>
-        <label>Tell us a little about the project<textarea name="message" rows="5" required></textarea></label>
-        <button class="button button-gold" type="submit">Send enquiry <span>↗</span></button>
-        <p class="form-note">Submitting opens your email app with the enquiry ready to send.</p>
+        <label for="enquiry-message">Tell us a little about the project<textarea id="enquiry-message" name="message" rows="5" maxlength="4000" required></textarea></label>
+        <div class="consent-field">
+          <input id="enquiry-consent" type="checkbox" name="consent" value="yes" required aria-describedby="enquiry-consent-note">
+          <label for="enquiry-consent">I agree that InterSacks Digital may contact me by email or phone about this enquiry.</label>
+        </div>
+        <p class="consent-note" id="enquiry-consent-note">Read the <a href="privacy.html">privacy policy</a> to see how an enquiry is used.</p>
+        <div class="enquiry-hp" aria-hidden="true"><label>Leave this field empty<input type="text" name="fax_number" tabindex="-1" autocomplete="off"></label></div>
+        <button class="button button-gold" type="submit"><span class="button-label">Send enquiry</span><span class="form-spinner" hidden></span><span class="button-icon" aria-hidden="true">↗</span></button>
+        <p class="form-note" id="form-status" role="status" aria-live="polite" aria-atomic="true"></p>
+        <p class="form-note">You can also email, call, or send a WhatsApp message if you prefer.</p>
       </form>
     </section>
   </main>

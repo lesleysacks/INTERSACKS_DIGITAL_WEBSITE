@@ -106,8 +106,11 @@ for (const loc of locs) {
 }
 
 const enquiry = read('js/script.js');
-if (!enquiry.includes('mailto:lesleysacks1@gmail.com?subject=')) fail('enquiry handoff no longer emails the existing recipient');
-if (/script\.google|apps script|spreadsheet/i.test(enquiry)) fail('enquiry script gained an unexpected endpoint');
+const enquiryForm = read('js/enquiry-form.js');
+const contactPage = read('contact.html');
+if (enquiry.includes('mailto:lesleysacks1@gmail.com?subject=')) fail('contact form still builds a mailto enquiry');
+if (!enquiryForm.includes('fetchImpl') || !contactPage.includes('name="consent"')) fail('enquiry form is missing the confirmed-save submission');
+if (/script\.google|apps script|spreadsheet|1N2xHXT2/i.test(enquiry + enquiryForm + contactPage)) fail('enquiry client contains a private endpoint or spreadsheet id');
 if (enquiry.includes('privacy.html')) fail('privacy.html was added to the page-transition list');
 
 const privacy = read('privacy.html');
