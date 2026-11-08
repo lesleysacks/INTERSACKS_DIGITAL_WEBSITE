@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { once } from 'node:events';
 import http from 'node:http';
 import test from 'node:test';
-import { clientIp, createEnquiryServer } from '../../server/enquiry-server.mjs';
+import { clientIdentity, clientIp, createEnquiryServer } from '../../server/enquiry-server.mjs';
 import { handleEnquiry, signEnquiry, SIGNED_FIELDS, VISITOR_FAILURE_MESSAGE } from '../../server/enquiry-handler.mjs';
 
 const TOKEN = '0123456789abcdef'.repeat(4);
@@ -254,6 +255,12 @@ test('untrusted forwarded headers are ignored', () => {
   assert.equal(clientIp(req, { ENQUIRY_TRUST_PROXY: 'false' }), '10.0.0.8');
   assert.equal(clientIp(req, { ENQUIRY_TRUST_PROXY: '1' }), '10.0.0.8');
   assert.equal(clientIp(req, { ENQUIRY_TRUST_PROXY: 'yes' }), '10.0.0.8');
+  assert.deepEqual(clientIdentity(req, {}), { ip: '10.0.0.8', shared: true });
+  const publicSocket = {
+    headers: { 'x-forwarded-for': '198.51.100.8', 'x-real-ip': '203.0.113.50' },
+    socket: { remoteAddress: '203.0.113.4' }
+  };
+  assert.deepEqual(clientIdentity(publicSocket, {}), { ip: '203.0.113.4', shared: false });
 });
 
 test('a trusted proxy uses the address it observed', () => {
@@ -277,10 +284,32 @@ test('a trusted proxy uses the address it observed', () => {
   assert.equal(clientIp(missing, { ENQUIRY_TRUST_PROXY: 'true' }), '10.0.0.8');
 });
 
+test('the HMAC key is the hex string rather than decoded key bytes', () => {
+  const hex = 'ab'.repeat(32);
+  const signed = signEnquiry(hex, { name: 'A' }, { timestamp: 1, nonce: '0123456789abcdef' });
+  const asText = crypto.createHmac('sha256', hex).update(signed.message).digest('hex');
+  const decoded = crypto.createHmac('sha256', Buffer.from(hex, 'hex')).update(signed.message).digest('hex');
+  assert.equal(signed.signature, asText);
+  assert.notEqual(signed.signature, decoded);
+});
+
+test('an unidentified address keeps a shared rate limit', async () => {
+  const limit = rateLimit();
+  limit.limit = 1;
+  limit.sharedLimit = 2;
+  const fetchImpl = async () => ({ status: 200, json: async () => ({ ok: true, leadId: 'ISD-20261108-0001' }) });
+  const first = await send(enquiry, { rateLimit: limit, fetchImpl, request: { ip: 'unknown' } });
+  const second = await send(enquiry, { rateLimit: limit, fetchImpl, request: { ip: 'unknown' } });
+  const third = await send(enquiry, { rateLimit: limit, fetchImpl, request: { ip: 'unknown' } });
+  assert.equal(first.result.status, 200);
+  assert.equal(second.result.status, 200);
+  assert.equal(third.result.status, 429);
+});
+
 test('the HTTP server ignores a client-supplied forwarding header', async () => {
   const server = createEnquiryServer({
     env: env(),
-    rateLimit: { limit: 1, windowMs: 600000, store: new Map() },
+    rateLimit: { limit: 1, sharedLimit: 1, windowMs: 600000, store: new Map() },
     fetchImpl: async () => ({ status: 200, json: async () => ({ ok: true, leadId: 'ISD-20261108-0001' }) })
   });
   server.listen(0, '127.0.0.1');
@@ -308,6 +337,36 @@ test('the HTTP server ignores a client-supplied forwarding header', async () => 
     });
     assert.equal(first.status, 200);
     assert.equal(second.status, 429);
+  } finally {
+    server.close();
+  }
+});
+
+test('a shared socket uses the shared ceiling and ignores forwarded headers', async () => {
+  const server = createEnquiryServer({
+    env: env(),
+    rateLimit: { limit: 1, sharedLimit: 2, windowMs: 600000, store: new Map() },
+    fetchImpl: async () => ({ status: 200, json: async () => ({ ok: true, leadId: 'ISD-20261108-0001' }) })
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const { port } = server.address();
+  const postAs = (forwarded) => fetch(`http://127.0.0.1:${port}/api/enquiry`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Origin: 'https://www.intersacks.co.za',
+      'X-Forwarded-For': forwarded
+    },
+    body: JSON.stringify(enquiry)
+  });
+  try {
+    const first = await postAs('198.51.100.1');
+    const second = await postAs('198.51.100.2');
+    const third = await postAs('198.51.100.3');
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(third.status, 429);
   } finally {
     server.close();
   }

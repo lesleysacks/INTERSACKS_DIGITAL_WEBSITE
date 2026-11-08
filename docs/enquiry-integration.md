@@ -65,7 +65,7 @@ Use a new standalone project. Do not open or replace an existing Client Operatio
 2. Set the project timezone to `Africa/Johannesburg`.
 3. Replace the default file with the contents of `apps-script/EnquiryWebApp.gs`. `apps-script/appsscript.json` records the same timezone and web-app access for a `clasp` deploy; the paste deploy does not need that file.
 4. The script contains the production spreadsheet id and opens it with `SpreadsheetApp.openById`. It does not call `getActiveSpreadsheet()`.
-5. Open **Project settings > Script properties** and add `ENQUIRY_PROXY_TOKEN`. Generate it with `openssl rand -hex 32`. That command prints 64 hex characters, which is 32 bytes. The same value goes on the proxy. It is the HMAC-SHA256 key. A shorter value is treated as missing configuration and every submission is rejected. The proxy does not send this value; it sends a timestamp, a nonce, and an HMAC-SHA256 signature. Run the command on the operator's machine, paste the output only into the script property and the proxy environment, and do not commit it, print it, or paste it into a ticket or log.
+5. Open **Project settings > Script properties** and add `ENQUIRY_PROXY_TOKEN`. Generate it with `openssl rand -hex 32`. That command draws 32 random bytes and prints them as 64 hexadecimal characters. Copy those 64 characters unchanged into this property and into the proxy environment. Both sides use that exact character string as the HMAC-SHA256 key, encoded as UTF-8. Do not hex-decode it on one side only. A shorter string is treated as missing configuration and every submission is rejected. The proxy does not send this value; it sends a timestamp, a nonce, and an HMAC-SHA256 signature. Run the command on the operator's machine, paste the output only into the script property and the proxy environment, and do not commit it, print it, or paste it into a ticket or log.
 6. Deploy **Web app**. Execute as **Me**. Who has access: **Anyone**. Copy the URL that ends in `/exec`.
 7. The Google account that deploys the web app needs edit access to the spreadsheet. The header row is protected with a warning only, so the script can still append a lead.
 
@@ -80,11 +80,12 @@ The proxy reads these variables from the environment. Do not commit real values.
 | Variable | Purpose |
 | --- | --- |
 | `APPS_SCRIPT_ENQUIRY_URL` | The web app `/exec` URL from the deploy step. |
-| `ENQUIRY_PROXY_TOKEN` | HMAC-SHA256 key. Same secret as the Apps Script property `ENQUIRY_PROXY_TOKEN`. At least 32 bytes, stored as the 64 hex characters from `openssl rand -hex 32`. |
+| `ENQUIRY_PROXY_TOKEN` | HMAC-SHA256 key. The same 64-character hex string on the proxy and in the Apps Script property. `openssl rand -hex 32` draws 32 random bytes and prints them as those 64 characters. Both sides use that string itself, as UTF-8. Neither side decodes it back to the raw 32 bytes. |
 | `ENQUIRY_ALLOWED_ORIGINS` | Comma-separated browser origins. Defaults to `https://www.intersacks.co.za` and `https://intersacks.co.za` when unset. |
 | `ENQUIRY_UPSTREAM_TIMEOUT_MS` | Optional. How long the proxy waits for Apps Script before aborting. Defaults to 15000 and is clamped to 1000–30000. |
-| `ENQUIRY_RATE_LIMIT` | Optional. Enquiries per client address in one process. Defaults to 8. |
-| `ENQUIRY_RATE_WINDOW_MS` | Optional. Window for that address limit. Defaults to 600000 (10 minutes). |
+| `ENQUIRY_RATE_LIMIT` | Optional. Enquiries per identified client address in one process. Defaults to 8. |
+| `ENQUIRY_SHARED_RATE_LIMIT` | Optional. Enquiries per shared or unidentified address in one process, over the same window. Defaults to 60. |
+| `ENQUIRY_RATE_WINDOW_MS` | Optional. Window for the per-address and shared-address limits. Defaults to 600000 (10 minutes). |
 | `ENQUIRY_GLOBAL_RATE_LIMIT` | Optional. Enquiries per process in the global window. Defaults to 60. |
 | `ENQUIRY_GLOBAL_RATE_WINDOW_MS` | Optional. Defaults to 60000 (1 minute). |
 | `PORT` | Optional. Defaults to `8787`. |
@@ -128,7 +129,7 @@ The button ignores further clicks until the request finishes. The submission key
 
 Empty phone numbers are allowed. A phone number that is present must be a South African number (`0` plus nine digits, or `27` / `+27` plus nine digits). Other countries are rejected; the visitor can leave the phone field blank and use email. The original number is stored unchanged. When that original starts with `+`, the cell is a text formula so Sheets displays the typed number instead of evaluating it. The normalised value is `+27` and the nine national digits, stored as text so the leading `+` is not treated as a formula.
 
-The proxy allows 8 posts per 10 minutes per client address, and 60 posts per minute for the whole process. Apps Script allows 20 new leads per hour per email address. A retry of an existing submission key does not count toward the Apps Script limit. A new signature is created for every proxy attempt, so a failed save can be retried with the same submission key and a new nonce.
+The proxy allows 8 posts per 10 minutes for an identified client address. A shared or unidentified address allows 60 posts per 10 minutes. The whole process allows 60 posts per minute. Apps Script allows 20 new leads per hour per email address. A retry of an existing submission key does not count toward the Apps Script limit. A new signature is created for every proxy attempt, so a failed save can be retried with the same submission key and a new nonce.
 
 ### Client address
 
@@ -153,16 +154,19 @@ With the flag on, the app reads the rightmost address in `X-Forwarded-For`, not 
 
 `ENQUIRY_TRUSTED_HOPS` defaults to `0`. Set it only when another trusted proxy appends its own peer address to the right of the client. The number is how many of those infrastructure addresses to skip, counting from the right. For one nginx hop configured as above, leave it unset.
 
-If the host's documentation does not say that it overwrites the header, or that the process is unreachable except through that proxy, leave `ENQUIRY_TRUST_PROXY` unset. Every visitor then shares the platform's socket address. That one bucket cannot be spoofed. It is a stricter limit, and it is the safe default.
+If the host's own documentation does not say that it overwrites the header, and that the Node port is unreachable except through that proxy, leave `ENQUIRY_TRUST_PROXY` unset. This repository does not assume that behaviour for any named host. Until the flag is set correctly, the process can only see the socket address.
 
 ### Rate-limit limits
 
-The Node counters live in a `Map` inside one process. They are not a guaranteed global limit.
+Eight requests per 10 minutes is the limit for one identified visitor. It is too small for every visitor on a process. That is what happens when a reverse proxy connects from one address and the forwarding header is not trusted. The limiter stays on. The fallback is a separate ceiling, not a bypass.
 
-- They disappear when that process restarts.
-- They are not shared by a second instance. Two replicas allow twice as many requests before Apps Script sees them.
-- Clients that share the address `unknown`, or that share the proxy's socket address when `ENQUIRY_TRUST_PROXY` is unset, share one bucket.
+- An identified address uses `ENQUIRY_RATE_LIMIT` (default 8 per 10 minutes). A trusted proxy hop is identified. A public socket address is also treated as that visitor.
+- A shared address uses `ENQUIRY_SHARED_RATE_LIMIT` (default 60 per 10 minutes), in the same window. Shared means `unknown`, a loopback, link-local, or private socket, or a socket chosen because `ENQUIRY_TRUST_PROXY=true` but the header did not contain a usable client address. Sixty submissions per 10 minutes is enough for this studio's contact form on one process, and it still stops an open flood. Change the variable if the real traffic needs a different ceiling.
+- This private-address classification is not a statement about any hosting vendor. A platform whose proxy connects from a public address is not detected. Every visitor then shares the stricter 8-request bucket until `ENQUIRY_TRUST_PROXY=true` is set from that platform's own documentation.
+- Client-supplied `X-Forwarded-For` and `X-Real-IP` never choose a bucket unless `ENQUIRY_TRUST_PROXY` is exactly `true` and the selected hop is a real IP.
+- The counters live in a `Map` inside one process. They disappear when that process restarts. They are not shared with a second instance. Two replicas allow twice as many requests, for both the per-visitor ceiling and the shared ceiling, before Apps Script sees them.
 - Idle addresses are removed after their window expires. A burst of distinct addresses can still grow the map until those windows end.
+- The process-wide cap of 60 requests per minute still applies to identified and shared addresses. It is also per process and also resets on restart.
 - Apps Script's per-email counter is also best-effort. It is stored in `CacheService` for up to one hour and can be evicted earlier. If the counter read or write throws, the check fails open and the lead is still saved. That decision keeps a cache blip from dropping a real enquiry that has already passed HMAC and nonce checks. It means 20 leads per hour is not a guaranteed cap. If the whole script cache is unavailable, nonce storage fails closed first and the enquiry is rejected before this fail-open path runs.
 
 ### Nonce replay protection
@@ -175,7 +179,9 @@ Nonce check and insert run inside `LockService.getScriptLock()`, after the signa
 
 Invalid JSON, a missing signature, an invalid signature, an expired signature, and missing authentication configuration do not open the spreadsheet and do not append `Error Log`. Those failures go to the Apps Script execution log as `Unauthenticated enquiry rejected: CODE`, at most once a minute per code while the script cache is available. If that cache is down, each execution still writes one fixed line and still does not write a row.
 
-After a valid signature, operational failures still append the existing five columns: Timestamp, Code, Stage, Lead ID, Detail (no personal data). The script writes that row only when those headers are unchanged.
+After a valid signature, the script can still append the existing five columns: Timestamp, Code, Stage, Lead ID, Detail (no personal data). It writes that row only when those headers are unchanged. Validation failures, lock contention, replays, nonce-cache failures, and per-email limit rejections are security events. Each of those codes is written at most once a minute. The enquiry is still rejected when the log is skipped. Spreadsheet and write failures (`SPREADSHEET_UNAVAILABLE`, `SHEET_MISSING`, `HEADER_MISMATCH`, `SHEET_FULL`, `INTERNAL`) are not throttled.
+
+Every Error Log append takes `LockService.getUserLock()` and holds it while it chooses the next row and writes it. That is a different lock from `getScriptLock()`, which covers the nonce check and the lead row. `logError_` does not call `getScriptLock()`. Validation runs before the script lock, and a failed script-lock attempt no longer holds it, so those calls take only the user lock. Calls that already hold the script lock may then take the user lock. Nothing takes the script lock while the user lock is held, so the two locks do not deadlock. The web app runs as the deploying account, so every execution shares the user lock. If that lock cannot be taken, or the throttle cache cannot record a security event, the row is skipped. The visitor is still rejected, and no lead is written. A standalone script does not use `getDocumentLock()`.
 
 ## 4. Test without touching production
 
@@ -208,8 +214,8 @@ A connection error should come back as the public failure message, with no URL o
 | Execution log `Unauthenticated enquiry rejected: UNAUTHORISED` | The signature does not match, or the timestamp, nonce, or signature is missing. This does not write `Error Log`. |
 | Execution log `Unauthenticated enquiry rejected: EXPIRED` | The signed timestamp is more than five minutes from the script clock. Check the proxy clock. This does not write `Error Log`. |
 | Execution log `Unauthenticated enquiry rejected: INVALID_JSON` | The body was not a JSON object. This does not write `Error Log`. |
-| Error Log code `REPLAY` | That nonce was already used. The proxy should send a new nonce on every attempt. |
-| Error Log code `AUTH_UNAVAILABLE` | The script cache could not record the nonce, so the lead was not written. |
+| Error Log code `REPLAY` | That nonce was already used. Further replays in the same minute are rejected without another row. The proxy should send a new nonce on every attempt. |
+| Error Log code `AUTH_UNAVAILABLE` | The script cache could not record the nonce, so the lead was not written. Repeated failures in the same minute do not add more rows. |
 | HTTP 504 from the proxy | Apps Script did not answer before `ENQUIRY_UPSTREAM_TIMEOUT_MS`. The visitor still sees the normal failure message. |
 | Error Log code `HEADER_MISMATCH` | Row 1 of `Leads` was renamed or reordered. Restore the 21 headers. Do not change the script to match a new order. |
 | Error Log code `SHEET_MISSING` | The `Leads` tab was renamed. The script expects `Leads`. |

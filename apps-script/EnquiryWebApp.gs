@@ -31,8 +31,25 @@
  * spreadsheet. Their failures are written to the execution log, at most
  * once a minute per reason when the script cache is available.
  *
- * ENQUIRY_PROXY_TOKEN must be at least 32 bytes, stored as 64 hex
- * characters from `openssl rand -hex 32`. Do not commit or print that value.
+ * ENQUIRY_PROXY_TOKEN is the 64-character hex string from
+ * `openssl rand -hex 32` (32 bytes of entropy). This script and the Node
+ * proxy both use that exact string as the HMAC-SHA256 key, encoded as
+ * UTF-8. Neither side decodes it back to the raw 32 bytes. Do not commit
+ * or print the value.
+ *
+ * Repetitive authenticated security rejections — validation, lock
+ * contention, replay, nonce-cache failure, and the per-email limit — append
+ * at most one Error Log row per code per minute. Spreadsheet and write
+ * failures are not throttled. Failing to record or throttle a log never
+ * accepts the enquiry.
+ *
+ * Error Log appends use LockService.getUserLock(), which is a different
+ * lock from the script lock that covers nonce checks and lead writes.
+ * logError_ never calls getScriptLock(). The web app runs as the deploying
+ * user, so every execution shares the user lock. The script lock is never
+ * acquired while the user lock is held, so the two locks cannot deadlock.
+ * A standalone script has no container document, so getDocumentLock() is
+ * not used.
  */
 var SPREADSHEET_ID = '1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M';
 var LEADS_SHEET = 'Leads';
@@ -47,6 +64,15 @@ var AUTH_SKEW_SECONDS = 300;
 var NONCE_TTL_SECONDS = 600;
 var MIN_SECRET_LENGTH = 64;
 var UNAUTH_LOG_TTL_SECONDS = 60;
+var SECURITY_LOG_TTL_SECONDS = 60;
+var ERROR_LOG_LOCK_WAIT_MS = 5000;
+var SECURITY_LOG_CODES = {
+  VALIDATION: true,
+  LOCKED: true,
+  REPLAY: true,
+  AUTH_UNAVAILABLE: true,
+  RATE_LIMIT: true
+};
 var SIGNED_FIELDS = [
   'name',
   'email',
@@ -566,8 +592,37 @@ function rateHash_(text) {
   return String(hash);
 }
 
-function logError_(code, stage, leadId, detail, spreadsheet) {
+function reserveSecurityLog_(code) {
   try {
+    var cache = CacheService.getScriptCache();
+    var key = 'security-log:' + code;
+    if (cache.get(key)) return false;
+    cache.put(key, '1', SECURITY_LOG_TTL_SECONDS);
+    if (cache.get(key) !== '1') return false;
+    return true;
+  } catch (cacheError) {
+    try {
+      console.log('Enquiry security log suppressed: ' + code);
+    } catch (ignoreLog) {
+      // The visitor response is already decided.
+    }
+    return false;
+  }
+}
+
+function logError_(code, stage, leadId, detail, spreadsheet) {
+  // User lock only. Do not call getScriptLock() here: the caller may
+  // already hold it, and LockService is not re-entrant.
+  var logLock = null;
+  var logLocked = false;
+  try {
+    logLock = LockService.getUserLock();
+    logLocked = logLock.tryLock(ERROR_LOG_LOCK_WAIT_MS);
+    if (!logLocked) {
+      console.log('Enquiry error log was not written.');
+      return;
+    }
+    if (SECURITY_LOG_CODES[code] && !reserveSecurityLog_(code)) return;
     var book = spreadsheet;
     if (!book) book = SpreadsheetApp.openById(SPREADSHEET_ID);
     var sheet = book.getSheetByName(ERROR_LOG_SHEET);
@@ -593,6 +648,14 @@ function logError_(code, stage, leadId, detail, spreadsheet) {
       console.log('Enquiry error log was not written.');
     } catch (ignoreLog) {
       // The visitor response is already decided.
+    }
+  } finally {
+    if (logLocked) {
+      try {
+        logLock.releaseLock();
+      } catch (ignoreRelease) {
+        // The row decision already happened.
+      }
     }
   }
 }

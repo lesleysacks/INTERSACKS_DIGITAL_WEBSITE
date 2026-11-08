@@ -102,6 +102,7 @@ function load(options = {}) {
   if (!options.omitErrorLog) sheets['Error Log'] = errorLog;
   const requested = [];
   const lock = options.lock || createLock();
+  const userLock = options.userLock || createLock();
   const cacheStore = new Map();
   const logs = [];
   const nonceUnderLock = [];
@@ -121,7 +122,10 @@ function load(options = {}) {
         };
       }
     },
-    LockService: { getScriptLock() { return lock; } },
+    LockService: {
+      getScriptLock() { return lock; },
+      getUserLock() { return userLock; }
+    },
     PropertiesService: {
       getScriptProperties() {
         return {
@@ -137,11 +141,13 @@ function load(options = {}) {
         if (options.cacheThrows) throw new Error('cache down');
         return {
           get(key) {
+            if (options.securityLogThrows && String(key).startsWith('security-log:')) throw new Error('security log cache down');
             if (String(key).startsWith('enquiry-nonce:')) nonceUnderLock.push(lock.held);
             if (options.rateCacheThrows && String(key).startsWith('lead-rate:')) throw new Error('rate cache down');
             return cacheStore.has(key) ? cacheStore.get(key) : null;
           },
           put(key, value) {
+            if (options.securityLogThrows && String(key).startsWith('security-log:')) throw new Error('security log cache down');
             if (String(key).startsWith('enquiry-nonce:')) nonceUnderLock.push(lock.held);
             if (options.noncePutDrops && String(key).startsWith('enquiry-nonce:')) return;
             if (options.rateCacheThrows && String(key).startsWith('lead-rate:')) throw new Error('rate cache down');
@@ -176,10 +182,12 @@ function load(options = {}) {
   return {
     doPost: sandbox.doPost,
     doGet: sandbox.doGet,
+    logError_: sandbox.logError_,
     safeDetail_: sandbox.safeDetail_,
     leads,
     errorLog,
     lock,
+    userLock,
     requested,
     cacheStore,
     logs,
@@ -525,6 +533,69 @@ test('a replayed nonce is rejected after the first accepted request', () => {
   assert.equal(app.cacheStore.get('enquiry-nonce:' + nonce), '1');
   assert.equal(app.nonceUnderLock.length > 0, true);
   assert.equal(app.nonceUnderLock.every(Boolean), true);
+});
+
+test('repeated replay attempts do not flood the Error Log', () => {
+  const app = load();
+  const nonce = 'replayed-nonce-0002';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const first = post(app, validBody(), { nonce, timestamp });
+  assert.equal(first.ok, true);
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const again = post(app, validBody(), { nonce, timestamp });
+    assert.equal(again.ok, false);
+    assert.equal(again.code, 'REPLAY');
+  }
+  assert.equal(savedLeads(app.leads).length, 1);
+  assert.deepEqual(errorCodes(app.errorLog), ['REPLAY']);
+  assert.equal(JSON.stringify(app.errorLog.rows).includes('lesley@example.co.za'), false);
+});
+
+test('a replay is still rejected when security logging cannot be throttled', () => {
+  const app = load({ securityLogThrows: true });
+  const nonce = 'replayed-nonce-0003';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const first = post(app, validBody(), { nonce, timestamp });
+  const again = post(app, validBody(), { nonce, timestamp });
+  assert.equal(first.ok, true);
+  assert.equal(again.code, 'REPLAY');
+  assert.equal(savedLeads(app.leads).length, 1);
+  assert.deepEqual(errorCodes(app.errorLog), []);
+  assert.equal(app.logs.includes('Enquiry security log suppressed: REPLAY'), true);
+});
+
+test('a logging failure does not accept a replayed enquiry', () => {
+  const userLock = createLock();
+  userLock.tryLock = () => { throw new Error('user lock unavailable'); };
+  const app = load({ userLock });
+  const nonce = 'replayed-nonce-0004';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const first = post(app, validBody(), { nonce, timestamp });
+  const again = post(app, validBody(), { nonce, timestamp });
+  assert.equal(first.ok, true);
+  assert.equal(again.code, 'REPLAY');
+  assert.equal(savedLeads(app.leads).length, 1);
+  assert.deepEqual(errorCodes(app.errorLog), []);
+});
+
+test('concurrent Error Log writes do not overwrite one another', () => {
+  const app = load();
+  let nested = false;
+  app.errorLog.onBeforeSet = () => {
+    if (nested) return;
+    nested = true;
+    assert.equal(app.userLock.held, true);
+    app.logError_('SHEET_MISSING', 'leads', '', 'The Leads sheet is missing.');
+    assert.equal(app.errorLog.rows[1][1], '');
+  };
+  app.logError_('HEADER_MISMATCH', 'headers', '', 'The Leads header row does not match the expected schema.');
+  assert.equal(app.errorLog.rows[1][1], 'HEADER_MISMATCH');
+  assert.equal(app.errorLog.rows[1][4], 'The Leads header row does not match the expected schema.');
+  assert.equal(app.userLock.held, false);
+  app.logError_('SHEET_FULL', 'write', 'ISD-20261108-0001', 'The Leads sheet has no empty row.');
+  assert.equal(app.errorLog.rows[1][1], 'HEADER_MISMATCH');
+  assert.equal(app.errorLog.rows[2][1], 'SHEET_FULL');
+  assert.deepEqual(app.errorLog.rows[0], ERROR_HEADERS);
 });
 
 test('nonce cache failure fails closed', () => {

@@ -39,6 +39,8 @@ export function signEnquiry(secret, fields, options = {}) {
   const timestamp = Math.trunc(Number(options.timestamp != null ? options.timestamp : Math.floor(Date.now() / 1000)));
   const nonce = options.nonce || crypto.randomBytes(16).toString('hex');
   const message = canonicalMessage(fields, timestamp, nonce);
+  // `secret` is the 64-character hex string, UTF-8 encoded. Apps Script
+  // hashes that same string. Do not decode it to raw bytes here only.
   const signature = crypto.createHmac('sha256', secret).update(message).digest('hex');
   return { timestamp, nonce, signature, message };
 }
@@ -102,13 +104,15 @@ export function handleEnquiry(request, options = {}) {
 
   const scriptUrl = String(env.APPS_SCRIPT_ENQUIRY_URL || '').trim();
   const token = String(env.ENQUIRY_PROXY_TOKEN || '');
-  // 64 hex characters is 32 bytes, matching MIN_SECRET_LENGTH in EnquiryWebApp.gs.
+  // Same 64-character hex string as EnquiryWebApp.gs. Both sides use it as
+  // UTF-8 HMAC key material. 64 hex characters represent 32 bytes of entropy.
   if (!scriptUrl || token.length < 64) {
     return json(503, { ok: false, message: VISITOR_FAILURE_MESSAGE }, cors);
   }
 
   const ip = request.ip || 'unknown';
-  if (!takeRateSlot(rateLimit, ip, now())) {
+  const shared = request.sharedIp === true || ip === 'unknown';
+  if (!takeRateSlot(rateLimit, ip, now(), shared)) {
     return json(429, { ok: false, message: 'Please wait a few minutes and try again.' }, cors);
   }
 
@@ -175,6 +179,7 @@ function normaliseRateLimit(rateLimit, env) {
   const source = rateLimit || defaultRateLimit;
   if (!Array.isArray(source.globalHits)) source.globalHits = rateLimit ? [] : defaultGlobalHits;
   if (!source.limit) source.limit = positiveInt(env.ENQUIRY_RATE_LIMIT, 8);
+  if (!source.sharedLimit) source.sharedLimit = positiveInt(env.ENQUIRY_SHARED_RATE_LIMIT, 60);
   if (!source.windowMs) source.windowMs = positiveInt(env.ENQUIRY_RATE_WINDOW_MS, 10 * 60 * 1000);
   if (!source.globalLimit) source.globalLimit = positiveInt(env.ENQUIRY_GLOBAL_RATE_LIMIT, 60);
   if (!source.globalWindowMs) source.globalWindowMs = positiveInt(env.ENQUIRY_GLOBAL_RATE_WINDOW_MS, 60 * 1000);
@@ -188,7 +193,7 @@ function positiveInt(value, fallback) {
   return Math.trunc(parsed);
 }
 
-function takeRateSlot(rateLimit, ip, now) {
+function takeRateSlot(rateLimit, ip, now, shared) {
   const store = rateLimit.store;
   for (const [key, stamps] of store) {
     const fresh = stamps.filter((stamp) => now - stamp < rateLimit.windowMs);
@@ -199,8 +204,9 @@ function takeRateSlot(rateLimit, ip, now) {
   rateLimit.globalHits = globalHits;
   if (globalHits.length >= rateLimit.globalLimit) return false;
 
+  const limit = shared ? rateLimit.sharedLimit : rateLimit.limit;
   const recent = store.get(ip) || [];
-  if (recent.length >= rateLimit.limit) return false;
+  if (recent.length >= limit) return false;
   recent.push(now);
   globalHits.push(now);
   store.set(ip, recent);

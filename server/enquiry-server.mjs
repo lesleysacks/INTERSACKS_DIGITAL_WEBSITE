@@ -12,6 +12,10 @@
  * the flag unset when that overwrite cannot be guaranteed. X-Real-IP is
  * never read. ENQUIRY_TRUSTED_HOPS skips that many infrastructure addresses
  * from the right; the default is 0.
+ *
+ * A loopback, link-local, or private socket is one shared bucket with its
+ * own ceiling. A public socket keeps the per-visitor ceiling. Forwarding
+ * headers do not change that unless ENQUIRY_TRUST_PROXY is exactly "true".
  */
 import http from 'node:http';
 import { handleEnquiry } from './enquiry-handler.mjs';
@@ -44,11 +48,13 @@ export function createEnquiryServer(options = {}) {
       return;
     }
 
+    const identity = clientIdentity(req, env);
     const result = await handleEnquiry({
       method: req.method || 'GET',
       headers: req.headers,
       bodyText,
-      ip: clientIp(req, env)
+      ip: identity.ip,
+      sharedIp: identity.shared
     }, { env, fetchImpl, rateLimit });
 
     res.writeHead(result.status, result.headers);
@@ -82,12 +88,17 @@ function readBody(req, limit) {
 }
 
 export function clientIp(req, env) {
+  return clientIdentity(req, env).ip;
+}
+
+export function clientIdentity(req, env) {
   const socketIp = req.socket && req.socket.remoteAddress ? String(req.socket.remoteAddress) : 'unknown';
-  if (String(env.ENQUIRY_TRUST_PROXY || '').toLowerCase() !== 'true') return socketIp;
+  const trust = String(env.ENQUIRY_TRUST_PROXY || '').toLowerCase() === 'true';
+  if (!trust) return { ip: socketIp, shared: isSharedSocket(socketIp) };
   const hops = forwardedHops(req.headers);
   const index = hops.length - 1 - trustedHops(env.ENQUIRY_TRUSTED_HOPS);
-  if (index < 0) return socketIp;
-  return isIpAddress(hops[index]) ? hops[index] : socketIp;
+  if (index < 0 || !isIpAddress(hops[index])) return { ip: socketIp, shared: true };
+  return { ip: hops[index], shared: false };
 }
 
 function forwardedHops(headers) {
@@ -113,6 +124,27 @@ function isIpAddress(value) {
     return value.split('::').length <= 2;
   }
   return isIpv4(value);
+}
+
+function isSharedSocket(ip) {
+  if (!ip || ip === 'unknown') return true;
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip);
+  const value = mapped ? mapped[1] : ip;
+  if (value.includes(':')) {
+    const lower = value.toLowerCase();
+    if (lower === '::1' || lower.startsWith('fe80:')) return true;
+    return /^f[cd][0-9a-f]{2}:/.test(lower);
+  }
+  const parts = value.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true;
+  const a = parts[0];
+  const b = parts[1];
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  return false;
 }
 
 function isIpv4(value) {
