@@ -26,6 +26,13 @@
  * enquiry.v1, the unix timestamp, the nonce, and the enquiry JSON. It must
  * match canonicalMessage in server/enquiry-handler.mjs. The raw secret is
  * not sent. A nonce can be used once inside the acceptance window.
+ *
+ * Requests that have not passed HMAC verification never open the
+ * spreadsheet. Their failures are written to the execution log, at most
+ * once a minute per reason when the script cache is available.
+ *
+ * ENQUIRY_PROXY_TOKEN must be at least 32 bytes, stored as 64 hex
+ * characters from `openssl rand -hex 32`. Do not commit or print that value.
  */
 var SPREADSHEET_ID = '1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M';
 var LEADS_SHEET = 'Leads';
@@ -38,6 +45,8 @@ var RATE_LIMIT_PER_HOUR = 20;
 var LOCK_WAIT_MS = 15000;
 var AUTH_SKEW_SECONDS = 300;
 var NONCE_TTL_SECONDS = 600;
+var MIN_SECRET_LENGTH = 64;
+var UNAUTH_LOG_TTL_SECONDS = 60;
 var SIGNED_FIELDS = [
   'name',
   'email',
@@ -101,14 +110,14 @@ function doGet() {
 function doPost(e) {
   var parsed = readPayload_(e);
   if (parsed.error) {
-    logError_('VALIDATION', 'parse', '', 'Request body was not valid JSON.');
+    noteUnauthenticated_('INVALID_JSON');
     return json_({ ok: false, code: 'VALIDATION', message: 'Check the enquiry and try again.' });
   }
 
   var payload = parsed.payload;
   var authState = signatureState_(payload);
   if (authState === 'missing-config') {
-    logError_('CONFIG', 'auth', '', 'The enquiry proxy token is not configured.');
+    noteUnauthenticated_('CONFIG');
     return json_({
       ok: false,
       code: 'CONFIG',
@@ -116,7 +125,7 @@ function doPost(e) {
     });
   }
   if (authState === 'expired') {
-    logError_('EXPIRED', 'auth', '', 'Rejected a request outside the acceptance window.');
+    noteUnauthenticated_('EXPIRED');
     return json_({
       ok: false,
       code: 'EXPIRED',
@@ -124,7 +133,7 @@ function doPost(e) {
     });
   }
   if (authState !== 'ok') {
-    logError_('UNAUTHORISED', 'auth', '', 'Rejected a request with a missing or incorrect signature.');
+    noteUnauthenticated_('UNAUTHORISED');
     return json_({
       ok: false,
       code: 'UNAUTHORISED',
@@ -151,6 +160,7 @@ function doPost(e) {
       });
     }
 
+    // The script lock is held here, so the nonce read and insert cannot race.
     var nonceState = consumeNonce_(String(payload.nonce));
     if (nonceState === 'replay') {
       logError_('REPLAY', 'auth', '', 'Rejected a replayed nonce.');
@@ -295,7 +305,7 @@ function signatureState_(payload) {
   } catch (propertyError) {
     return 'missing-config';
   }
-  if (!secret || secret.length < 16) return 'missing-config';
+  if (!secret || secret.length < MIN_SECRET_LENGTH) return 'missing-config';
   var timestamp = Number(payload.timestamp);
   var nonce = String(payload.nonce || '');
   var signature = String(payload.signature || '').toLowerCase();
@@ -332,6 +342,11 @@ function hmacHex_(secret, message) {
   return hex;
 }
 
+// Call only while the script lock is held. CacheService is not durable
+// storage: an entry can be evicted before NONCE_TTL_SECONDS, the longest
+// TTL Google accepts is six hours, and a forgotten nonce can be accepted
+// again until the signed timestamp itself expires. A thrown cache call, or
+// a put that does not read back, fails closed and the lead is not written.
 function consumeNonce_(nonce) {
   try {
     var cache = CacheService.getScriptCache();
@@ -342,6 +357,27 @@ function consumeNonce_(nonce) {
     return 'ok';
   } catch (cacheError) {
     return 'unavailable';
+  }
+}
+
+// Unauthenticated failures must not open the spreadsheet. When the script
+// cache is available, one execution-log line is emitted per code per minute.
+// If that cache is down, each execution still logs one fixed line and still
+// does not write a row.
+function noteUnauthenticated_(code) {
+  var label = String(code || 'UNAUTHORISED');
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = 'unauth-note:' + label;
+    if (cache.get(key)) return;
+    cache.put(key, '1', UNAUTH_LOG_TTL_SECONDS);
+  } catch (ignore) {
+    // Continue to the execution log. Do not open the spreadsheet.
+  }
+  try {
+    console.log('Unauthenticated enquiry rejected: ' + label);
+  } catch (ignoreLog) {
+    // The visitor response is already decided.
   }
 }
 
@@ -505,6 +541,12 @@ function nextLeadId_(rows, now) {
   return 'ISD-' + stamp + '-' + next;
 }
 
+// Best-effort courtesy limit, kept fail-open on purpose. A cache error here
+// still allows the lead so a cache blip does not discard a real enquiry that
+// has already passed HMAC and nonce checks. The counter can also be evicted
+// before the hour ends. This is not a guaranteed cap. If the whole script
+// cache is down, consumeNonce_ fails closed first and this function is not
+// reached.
 function withinRateLimit_(email) {
   try {
     var cache = CacheService.getScriptCache();
@@ -546,7 +588,12 @@ function logError_(code, stage, leadId, detail, spreadsheet) {
       safeDetail_(detail)
     ]]);
   } catch (logError) {
-    // The visitor response is already decided. Logging must not replace it.
+    // The exception text can contain the spreadsheet id. Keep the line fixed.
+    try {
+      console.log('Enquiry error log was not written.');
+    } catch (ignoreLog) {
+      // The visitor response is already decided.
+    }
   }
 }
 

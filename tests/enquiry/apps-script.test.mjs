@@ -12,7 +12,7 @@ import { runInNewContext } from 'node:vm';
 import { signEnquiry } from '../../server/enquiry-handler.mjs';
 
 const source = readFileSync(fileURLToPath(new URL('../../apps-script/EnquiryWebApp.gs', import.meta.url)), 'utf8');
-const TOKEN = 'test-token-value-0123456789';
+const TOKEN = '0123456789abcdef'.repeat(4);
 const KEY = '22222222-2222-4222-8222-222222222222';
 const SPREADSHEET_ID = '1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M';
 const SOURCE = 'Website \u2013 Contact form';
@@ -77,16 +77,16 @@ function createSheet(headers, dataRows = [], maxRows = 12) {
 }
 
 function createLock() {
-  let held = false;
   const lock = {
+    held: false,
+    attempts: 0,
     tryLock() {
       lock.attempts += 1;
-      if (held) return false;
-      held = true;
+      if (lock.held) return false;
+      lock.held = true;
       return true;
     },
-    releaseLock() { held = false; },
-    attempts: 0
+    releaseLock() { lock.held = false; }
   };
   return lock;
 }
@@ -103,8 +103,11 @@ function load(options = {}) {
   const requested = [];
   const lock = options.lock || createLock();
   const cacheStore = new Map();
+  const logs = [];
+  const nonceUnderLock = [];
   let opened = 0;
   const sandbox = {
+    console: { log(message) { logs.push(String(message)); } },
     SpreadsheetApp: {
       openById(id) {
         opened += 1;
@@ -133,8 +136,17 @@ function load(options = {}) {
       getScriptCache() {
         if (options.cacheThrows) throw new Error('cache down');
         return {
-          get(key) { return cacheStore.has(key) ? cacheStore.get(key) : null; },
-          put(key, value) { cacheStore.set(key, String(value)); }
+          get(key) {
+            if (String(key).startsWith('enquiry-nonce:')) nonceUnderLock.push(lock.held);
+            if (options.rateCacheThrows && String(key).startsWith('lead-rate:')) throw new Error('rate cache down');
+            return cacheStore.has(key) ? cacheStore.get(key) : null;
+          },
+          put(key, value) {
+            if (String(key).startsWith('enquiry-nonce:')) nonceUnderLock.push(lock.held);
+            if (options.noncePutDrops && String(key).startsWith('enquiry-nonce:')) return;
+            if (options.rateCacheThrows && String(key).startsWith('lead-rate:')) throw new Error('rate cache down');
+            cacheStore.set(key, String(value));
+          }
         };
       }
     },
@@ -170,6 +182,8 @@ function load(options = {}) {
     lock,
     requested,
     cacheStore,
+    logs,
+    nonceUnderLock,
     opened: () => opened
   };
 }
@@ -453,16 +467,29 @@ test('values that could become formulas are stored as text', () => {
   assert.equal(lead[7].startsWith("'+"), true);
 });
 
-test('a missing secret or a bad signature does not write a lead', () => {
+test('missing authentication configuration cannot write to the Error Log', () => {
   const missing = load({ token: '' });
   assert.equal(post(missing, validBody()).code, 'CONFIG');
   assert.equal(savedLeads(missing.leads).length, 0);
+  assert.equal(missing.opened(), 0);
+  assert.deepEqual(errorCodes(missing.errorLog), []);
+  assert.deepEqual(missing.logs, ['Unauthenticated enquiry rejected: CONFIG']);
 
+  const short = load({ token: 'a'.repeat(63) });
+  assert.equal(post(short, validBody()).code, 'CONFIG');
+  assert.equal(short.opened(), 0);
+  assert.deepEqual(errorCodes(short.errorLog), []);
+});
+
+test('invalid signatures cannot write to the Error Log', () => {
   const wrong = load();
-  assert.equal(post(wrong, validBody(), { secret: 'test-token-value-0123456780' }).code, 'UNAUTHORISED');
+  assert.equal(post(wrong, validBody(), { secret: 'fedcba9876543210'.repeat(4) }).code, 'UNAUTHORISED');
   assert.equal(post(wrong, validBody(), { tamper: true }).code, 'UNAUTHORISED');
   assert.equal(post(wrong, validBody(), { unsigned: true }).code, 'UNAUTHORISED');
   assert.equal(savedLeads(wrong.leads).length, 0);
+  assert.equal(wrong.opened(), 0);
+  assert.deepEqual(errorCodes(wrong.errorLog), []);
+  assert.deepEqual(wrong.logs, ['Unauthenticated enquiry rejected: UNAUTHORISED']);
 });
 
 test('boolean consent from the browser still verifies', () => {
@@ -472,14 +499,16 @@ test('boolean consent from the browser still verifies', () => {
   assert.equal(savedLeads(app.leads)[0][10], 'Yes');
 });
 
-test('an expired signature is rejected and does not write a lead', () => {
+test('expired signatures cannot write to the Error Log', () => {
   const app = load();
   const past = Math.floor(Date.now() / 1000) - 301;
   const future = Math.floor(Date.now() / 1000) + 301;
   assert.equal(post(app, validBody(), { timestamp: past }).code, 'EXPIRED');
   assert.equal(post(app, validBody(), { timestamp: future, nonce: 'ffffffffffffffff' }).code, 'EXPIRED');
   assert.equal(savedLeads(app.leads).length, 0);
-  assert.equal(app.errorLog.rows[1][1], 'EXPIRED');
+  assert.equal(app.opened(), 0);
+  assert.deepEqual(errorCodes(app.errorLog), []);
+  assert.deepEqual(app.logs, ['Unauthenticated enquiry rejected: EXPIRED']);
 });
 
 test('a replayed nonce is rejected after the first accepted request', () => {
@@ -494,13 +523,31 @@ test('a replayed nonce is rejected after the first accepted request', () => {
   assert.equal(second.code, 'REPLAY');
   assert.equal(savedLeads(app.leads).length, 1);
   assert.equal(app.cacheStore.get('enquiry-nonce:' + nonce), '1');
+  assert.equal(app.nonceUnderLock.length > 0, true);
+  assert.equal(app.nonceUnderLock.every(Boolean), true);
 });
 
-test('nonce protection fails closed when the cache is unavailable', () => {
-  const app = load({ cacheThrows: true });
+test('nonce cache failure fails closed', () => {
+  const unavailable = load({ cacheThrows: true });
+  const blocked = post(unavailable, validBody());
+  assert.equal(blocked.code, 'AUTH_UNAVAILABLE');
+  assert.equal(savedLeads(unavailable.leads).length, 0);
+
+  const dropped = load({ noncePutDrops: true });
+  const unstored = post(dropped, validBody());
+  assert.equal(unstored.code, 'AUTH_UNAVAILABLE');
+  assert.equal(savedLeads(dropped.leads).length, 0);
+  assert.equal(dropped.nonceUnderLock.length > 0, true);
+  assert.equal(dropped.nonceUnderLock.every(Boolean), true);
+});
+
+test('an email rate-limit cache failure still saves the lead', () => {
+  const app = load({ rateCacheThrows: true });
   const result = post(app, validBody());
-  assert.equal(result.code, 'AUTH_UNAVAILABLE');
-  assert.equal(savedLeads(app.leads).length, 0);
+  assert.equal(result.ok, true);
+  assert.equal(result.leadId, 'ISD-20261108-0001');
+  assert.equal(savedLeads(app.leads).length, 1);
+  assert.deepEqual(errorCodes(app.errorLog), []);
 });
 
 test('an omitted submission key is generated and an invalid key is rejected', () => {
@@ -517,12 +564,36 @@ test('an omitted submission key is generated and an invalid key is rejected', ()
   assert.equal(savedLeads(invalid.leads).length, 0);
 });
 
-test('malformed JSON and GET do not write a lead', () => {
+test('invalid JSON cannot write to the Error Log', () => {
   const app = load();
   const malformed = JSON.parse(app.doPost({ postData: { contents: '{', type: 'application/json' } }).text);
+  const arrayBody = JSON.parse(app.doPost({ postData: { contents: '[]', type: 'application/json' } }).text);
   assert.equal(malformed.code, 'VALIDATION');
+  assert.equal(arrayBody.code, 'VALIDATION');
   assert.equal(JSON.parse(app.doGet().text).code, 'METHOD_NOT_ALLOWED');
   assert.equal(savedLeads(app.leads).length, 0);
+  assert.equal(app.opened(), 0);
+  assert.deepEqual(errorCodes(app.errorLog), []);
+  assert.deepEqual(app.logs, ['Unauthenticated enquiry rejected: INVALID_JSON']);
+});
+
+test('authenticated spreadsheet errors still log safely', () => {
+  const missingSheet = load({ omitLeads: true });
+  const missing = post(missingSheet, validBody());
+  assert.equal(missing.code, 'SHEET_MISSING');
+  assert.deepEqual(missingSheet.errorLog.rows[0], ERROR_HEADERS);
+  assert.equal(missingSheet.errorLog.rows[1][1], 'SHEET_MISSING');
+  assert.equal(missingSheet.errorLog.rows[1][2], 'leads');
+  assert.equal(JSON.stringify(missingSheet.errorLog.rows).includes('lesley@example.co.za'), false);
+  assert.equal(JSON.stringify(missingSheet.errorLog.rows).includes(SPREADSHEET_ID), false);
+
+  const missingBook = load({ missingSpreadsheet: true });
+  const blocked = post(missingBook, validBody());
+  assert.equal(blocked.code, 'SPREADSHEET_UNAVAILABLE');
+  assert.equal(blocked.message.includes(SPREADSHEET_ID), false);
+  assert.deepEqual(errorCodes(missingBook.errorLog), []);
+  assert.equal(missingBook.logs.includes('Enquiry error log was not written.'), true);
+  assert.equal(missingBook.logs.some((line) => line.includes(SPREADSHEET_ID)), false);
 });
 
 test('error details redact personal data and the spreadsheet id', () => {

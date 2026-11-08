@@ -65,7 +65,7 @@ Use a new standalone project. Do not open or replace an existing Client Operatio
 2. Set the project timezone to `Africa/Johannesburg`.
 3. Replace the default file with the contents of `apps-script/EnquiryWebApp.gs`. `apps-script/appsscript.json` records the same timezone and web-app access for a `clasp` deploy; the paste deploy does not need that file.
 4. The script contains the production spreadsheet id and opens it with `SpreadsheetApp.openById`. It does not call `getActiveSpreadsheet()`.
-5. Open **Project settings > Script properties** and add `ENQUIRY_PROXY_TOKEN`. The value must be at least 16 characters, random, and the same value as `ENQUIRY_PROXY_TOKEN` on the proxy. It is the HMAC key. If the property is missing, every submission is rejected. The proxy does not send this value; it sends a timestamp, a nonce, and an HMAC-SHA256 signature.
+5. Open **Project settings > Script properties** and add `ENQUIRY_PROXY_TOKEN`. Generate it with `openssl rand -hex 32`. That command prints 64 hex characters, which is 32 bytes. The same value goes on the proxy. It is the HMAC-SHA256 key. A shorter value is treated as missing configuration and every submission is rejected. The proxy does not send this value; it sends a timestamp, a nonce, and an HMAC-SHA256 signature. Run the command on the operator's machine, paste the output only into the script property and the proxy environment, and do not commit it, print it, or paste it into a ticket or log.
 6. Deploy **Web app**. Execute as **Me**. Who has access: **Anyone**. Copy the URL that ends in `/exec`.
 7. The Google account that deploys the web app needs edit access to the spreadsheet. The header row is protected with a warning only, so the script can still append a lead.
 
@@ -80,7 +80,7 @@ The proxy reads these variables from the environment. Do not commit real values.
 | Variable | Purpose |
 | --- | --- |
 | `APPS_SCRIPT_ENQUIRY_URL` | The web app `/exec` URL from the deploy step. |
-| `ENQUIRY_PROXY_TOKEN` | HMAC key. Same secret as the Apps Script property `ENQUIRY_PROXY_TOKEN`. At least 16 characters. |
+| `ENQUIRY_PROXY_TOKEN` | HMAC-SHA256 key. Same secret as the Apps Script property `ENQUIRY_PROXY_TOKEN`. At least 32 bytes, stored as the 64 hex characters from `openssl rand -hex 32`. |
 | `ENQUIRY_ALLOWED_ORIGINS` | Comma-separated browser origins. Defaults to `https://www.intersacks.co.za` and `https://intersacks.co.za` when unset. |
 | `ENQUIRY_UPSTREAM_TIMEOUT_MS` | Optional. How long the proxy waits for Apps Script before aborting. Defaults to 15000 and is clamped to 1000–30000. |
 | `ENQUIRY_RATE_LIMIT` | Optional. Enquiries per client address in one process. Defaults to 8. |
@@ -88,19 +88,23 @@ The proxy reads these variables from the environment. Do not commit real values.
 | `ENQUIRY_GLOBAL_RATE_LIMIT` | Optional. Enquiries per process in the global window. Defaults to 60. |
 | `ENQUIRY_GLOBAL_RATE_WINDOW_MS` | Optional. Defaults to 60000 (1 minute). |
 | `PORT` | Optional. Defaults to `8787`. |
-| `ENQUIRY_BIND` | Optional. Defaults to `127.0.0.1`. Use `0.0.0.0` behind a reverse proxy. |
-| `ENQUIRY_TRUST_PROXY` | Optional. Set to `true` only when a trusted proxy overwrites `X-Forwarded-For`. |
+| `ENQUIRY_BIND` | Optional. Defaults to `127.0.0.1`. Use a private interface only when a reverse proxy is the only path to the process. |
+| `ENQUIRY_TRUST_PROXY` | Optional. The string `true` only, and only under the conditions in "Client address" below. `1` and `yes` do not enable it. |
+| `ENQUIRY_TRUSTED_HOPS` | Optional. Infrastructure addresses to skip from the right of `X-Forwarded-For`. Default `0`. Ignored unless `ENQUIRY_TRUST_PROXY=true`. |
 
 Start it with:
 
+Generate the key, then export the variables. Do not echo the key back into a shell history you share, and do not commit the output.
+
 ```bash
+openssl rand -hex 32
 export APPS_SCRIPT_ENQUIRY_URL='https://script.google.com/macros/s/DEPLOYMENT_ID/exec'
-export ENQUIRY_PROXY_TOKEN='paste-the-same-long-random-string'
+export ENQUIRY_PROXY_TOKEN='paste-the-64-hex-characters-here'
 export ENQUIRY_ALLOWED_ORIGINS='https://www.intersacks.co.za,https://intersacks.co.za'
 node server/enquiry-server.mjs
 ```
 
-The process serves `POST /api/enquiry`. For each enquiry it builds a fresh nonce and a unix timestamp, then HMAC-SHA256 signs `enquiry.v1`, the timestamp, the nonce, and the enquiry fields with `ENQUIRY_PROXY_TOKEN`. Apps Script accepts the signature for five minutes and remembers the nonce for ten minutes. A second use of that nonce is rejected. The proxy follows the Apps Script redirect and returns `{ "ok": true, "leadId": "ISD-..." }` only when Apps Script confirms the write. Apps Script itself usually answers HTTP 200 for both success and failure, so the proxy reads the JSON `ok` field. The upstream call uses `AbortController` and stops at `ENQUIRY_UPSTREAM_TIMEOUT_MS`.
+The process serves `POST /api/enquiry`. For each enquiry it builds a fresh nonce and a unix timestamp, then HMAC-SHA256 signs `enquiry.v1`, the timestamp, the nonce, and the enquiry fields with `ENQUIRY_PROXY_TOKEN`. Apps Script accepts the signature for five minutes. It then tries to remember the nonce for ten minutes. A second use of a nonce that is still in the cache is rejected. The proxy follows the Apps Script redirect and returns `{ "ok": true, "leadId": "ISD-..." }` only when Apps Script confirms the write. Apps Script itself usually answers HTTP 200 for both success and failure, so the proxy reads the JSON `ok` field. The upstream call uses `AbortController` and stops at `ENQUIRY_UPSTREAM_TIMEOUT_MS`.
 
 Put the proxy on a host you control. Two layouts work:
 
@@ -126,16 +130,52 @@ Empty phone numbers are allowed. A phone number that is present must be a South 
 
 The proxy allows 8 posts per 10 minutes per client address, and 60 posts per minute for the whole process. Apps Script allows 20 new leads per hour per email address. A retry of an existing submission key does not count toward the Apps Script limit. A new signature is created for every proxy attempt, so a failed save can be retried with the same submission key and a new nonce.
 
+### Client address
+
+No Node host is selected yet. GitHub Pages cannot run this process. These rules apply to whichever host you choose (a VPS, Fly.io, Render, Railway, Cloud Run, or another Node service).
+
+`clientIp()` ignores `X-Forwarded-For` and `X-Real-IP` unless `ENQUIRY_TRUST_PROXY` is exactly `true` (any other value, including `1` and `yes`, leaves the headers ignored). The socket address is used instead. A visitor cannot pick a rate-limit bucket by sending a forwarding header to a process that is directly reachable.
+
+Set `ENQUIRY_TRUST_PROXY=true` only when both of these are true:
+
+1. The Node port is not reachable from the public internet. Keep `ENQUIRY_BIND` on `127.0.0.1` or another private interface, and let only the reverse proxy connect.
+2. That proxy overwrites `X-Forwarded-For` with the TCP client it accepted. It must not copy a value the visitor sent.
+
+On nginx, that overwrite is:
+
+```nginx
+proxy_set_header X-Forwarded-For $remote_addr;
+```
+
+Use `$remote_addr`. Do not use `$proxy_add_x_forwarded_for` or `$http_x_forwarded_for`. `$remote_addr` is the address nginx accepted, so a visitor cannot choose it.
+
+With the flag on, the app reads the rightmost address in `X-Forwarded-For`, not the leftmost. The leftmost is where a client-supplied prefix sits when a proxy appends. The rightmost is the address the nearest proxy observed. After the nginx line above, the header has one address and that address is the client. A value that is not an IP is discarded and the socket address is used.
+
+`ENQUIRY_TRUSTED_HOPS` defaults to `0`. Set it only when another trusted proxy appends its own peer address to the right of the client. The number is how many of those infrastructure addresses to skip, counting from the right. For one nginx hop configured as above, leave it unset.
+
+If the host's documentation does not say that it overwrites the header, or that the process is unreachable except through that proxy, leave `ENQUIRY_TRUST_PROXY` unset. Every visitor then shares the platform's socket address. That one bucket cannot be spoofed. It is a stricter limit, and it is the safe default.
+
 ### Rate-limit limits
 
-The Node counters live in a `Map` inside one process.
+The Node counters live in a `Map` inside one process. They are not a guaranteed global limit.
 
 - They disappear when that process restarts.
 - They are not shared by a second instance. Two replicas allow twice as many requests before Apps Script sees them.
-- Clients that share the address `unknown` share one bucket.
-- `X-Forwarded-For` is read only when `ENQUIRY_TRUST_PROXY=true`. Turn that on only if the platform overwrites the header. A client who can set it can otherwise pick a new bucket on every request.
+- Clients that share the address `unknown`, or that share the proxy's socket address when `ENQUIRY_TRUST_PROXY` is unset, share one bucket.
 - Idle addresses are removed after their window expires. A burst of distinct addresses can still grow the map until those windows end.
-- This is a local brake. The shared brake is Apps Script: 20 new leads per email address per hour, stored in the script cache and seen by every execution of that script. If that cache read throws, the email limit fails open and the lead can still be saved. Nonce replay protection fails closed: if the nonce cannot be stored, the lead is not written.
+- Apps Script's per-email counter is also best-effort. It is stored in `CacheService` for up to one hour and can be evicted earlier. If the counter read or write throws, the check fails open and the lead is still saved. That decision keeps a cache blip from dropping a real enquiry that has already passed HMAC and nonce checks. It means 20 leads per hour is not a guaranteed cap. If the whole script cache is unavailable, nonce storage fails closed first and the enquiry is rejected before this fail-open path runs.
+
+### Nonce replay protection
+
+Nonce check and insert run inside `LockService.getScriptLock()`, after the signature has been accepted and before the spreadsheet is opened. Two executions cannot both observe a missing nonce and both insert a lead.
+
+`CacheService` is a cache, not a database. Google can evict an entry before the 600-second TTL, the longest TTL the service accepts is six hours, and a nonce that has been evicted can be presented again until the signed timestamp is outside the five-minute window. Do not treat the cache as permanent or guaranteed storage. If `get` or `put` throws, or the value does not read back after `put`, the script fails closed and does not write the lead.
+
+### Error Log
+
+Invalid JSON, a missing signature, an invalid signature, an expired signature, and missing authentication configuration do not open the spreadsheet and do not append `Error Log`. Those failures go to the Apps Script execution log as `Unauthenticated enquiry rejected: CODE`, at most once a minute per code while the script cache is available. If that cache is down, each execution still writes one fixed line and still does not write a row.
+
+After a valid signature, operational failures still append the existing five columns: Timestamp, Code, Stage, Lead ID, Detail (no personal data). The script writes that row only when those headers are unchanged.
 
 ## 4. Test without touching production
 
@@ -150,9 +190,11 @@ To exercise the proxy locally against a fake upstream:
 
 ```bash
 APPS_SCRIPT_ENQUIRY_URL='http://127.0.0.1:9/exec' \
-ENQUIRY_PROXY_TOKEN='local-test-token-0123456789' \
+ENQUIRY_PROXY_TOKEN="$(openssl rand -hex 32)" \
 node server/enquiry-server.mjs
 ```
+
+That local value exists only in the process environment. Do not copy it into the repository.
 
 A connection error should come back as the public failure message, with no URL or stack trace in the JSON. Replace the URL with a real `/exec` deployment only when you want a live test, and use a copy of the spreadsheet if the lead should not land in production. That means changing `SPREADSHEET_ID` in a private copy of the script, not in this repository's deployed production project.
 
@@ -161,10 +203,11 @@ A connection error should come back as the public failure message, with no URL o
 | What you see | What to check |
 | --- | --- |
 | The form says it could not send the enquiry | Proxy logs, then the Apps Script execution log. The page hides the underlying reason on purpose. |
-| HTTP 503 from the proxy | `APPS_SCRIPT_ENQUIRY_URL` or `ENQUIRY_PROXY_TOKEN` is missing, or the token is shorter than 16 characters. |
-| Error Log code `CONFIG` | The script property `ENQUIRY_PROXY_TOKEN` is missing or too short. |
-| Error Log code `UNAUTHORISED` | The signature does not match `ENQUIRY_PROXY_TOKEN`, or the timestamp, nonce, or signature is missing. |
-| Error Log code `EXPIRED` | The signed timestamp is more than five minutes from the script clock. Check the proxy clock. |
+| HTTP 503 from the proxy | `APPS_SCRIPT_ENQUIRY_URL` or `ENQUIRY_PROXY_TOKEN` is missing, or the token is shorter than 64 hex characters (32 bytes). |
+| Execution log `Unauthenticated enquiry rejected: CONFIG` | The script property `ENQUIRY_PROXY_TOKEN` is missing or shorter than 64 characters. This does not write `Error Log`. |
+| Execution log `Unauthenticated enquiry rejected: UNAUTHORISED` | The signature does not match, or the timestamp, nonce, or signature is missing. This does not write `Error Log`. |
+| Execution log `Unauthenticated enquiry rejected: EXPIRED` | The signed timestamp is more than five minutes from the script clock. Check the proxy clock. This does not write `Error Log`. |
+| Execution log `Unauthenticated enquiry rejected: INVALID_JSON` | The body was not a JSON object. This does not write `Error Log`. |
 | Error Log code `REPLAY` | That nonce was already used. The proxy should send a new nonce on every attempt. |
 | Error Log code `AUTH_UNAVAILABLE` | The script cache could not record the nonce, so the lead was not written. |
 | HTTP 504 from the proxy | Apps Script did not answer before `ENQUIRY_UPSTREAM_TIMEOUT_MS`. The visitor still sees the normal failure message. |
@@ -183,7 +226,7 @@ Visitor-facing responses never include the spreadsheet id, the token, an excepti
 ## Manual steps still required
 
 1. Create the standalone Apps Script project and deploy the web app.
-2. Add the script property `ENQUIRY_PROXY_TOKEN`.
+2. Generate `ENQUIRY_PROXY_TOKEN` with `openssl rand -hex 32` and add that script property. Do not commit or print the value.
 3. Choose where the Node proxy will run and set its environment variables there.
 4. If the proxy is on another origin, set `data-enquiry-endpoint` and `ENQUIRY_ALLOWED_ORIGINS` before the site goes live.
 5. Approve that host, then merge. Merging to `main` publishes the site through GitHub Pages.

@@ -3,8 +3,15 @@
  *
  *   APPS_SCRIPT_ENQUIRY_URL=... ENQUIRY_PROXY_TOKEN=... node server/enquiry-server.mjs
  *
- * Bind address defaults to 127.0.0.1. Set ENQUIRY_BIND=0.0.0.0 when the
- * process is behind a reverse proxy on a server.
+ * Bind address defaults to 127.0.0.1. Set ENQUIRY_BIND=0.0.0.0 only when a
+ * reverse proxy is the only path to this process.
+ *
+ * ENQUIRY_TRUST_PROXY must be the string "true" and the proxy must overwrite
+ * X-Forwarded-For with the client it accepted (nginx: $remote_addr). The
+ * rightmost address is used. Client-supplied prefixes are ignored. Leave
+ * the flag unset when that overwrite cannot be guaranteed. X-Real-IP is
+ * never read. ENQUIRY_TRUSTED_HOPS skips that many infrastructure addresses
+ * from the right; the default is 0.
  */
 import http from 'node:http';
 import { handleEnquiry } from './enquiry-handler.mjs';
@@ -74,12 +81,44 @@ function readBody(req, limit) {
   });
 }
 
-function clientIp(req, env) {
-  if (String(env.ENQUIRY_TRUST_PROXY || '').toLowerCase() === 'true') {
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) return String(forwarded).split(',')[0].trim();
+export function clientIp(req, env) {
+  const socketIp = req.socket && req.socket.remoteAddress ? String(req.socket.remoteAddress) : 'unknown';
+  if (String(env.ENQUIRY_TRUST_PROXY || '').toLowerCase() !== 'true') return socketIp;
+  const hops = forwardedHops(req.headers);
+  const index = hops.length - 1 - trustedHops(env.ENQUIRY_TRUSTED_HOPS);
+  if (index < 0) return socketIp;
+  return isIpAddress(hops[index]) ? hops[index] : socketIp;
+}
+
+function forwardedHops(headers) {
+  if (!headers) return [];
+  const value = headers['x-forwarded-for'];
+  const text = Array.isArray(value) ? value.join(',') : value;
+  if (typeof text !== 'string' || !text.trim()) return [];
+  return text.split(',').map((part) => part.trim()).filter(Boolean);
+}
+
+function trustedHops(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 8) return 0;
+  return parsed;
+}
+
+function isIpAddress(value) {
+  if (typeof value !== 'string' || value.length < 2 || value.length > 45) return false;
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(value);
+  if (mapped) return isIpv4(mapped[1]);
+  if (value.includes(':')) {
+    if (!/^[0-9a-fA-F:]+$/.test(value)) return false;
+    return value.split('::').length <= 2;
   }
-  return req.socket && req.socket.remoteAddress ? req.socket.remoteAddress : 'unknown';
+  return isIpv4(value);
+}
+
+function isIpv4(value) {
+  const parts = value.split('.');
+  if (parts.length !== 4) return false;
+  return parts.every((part) => /^\d{1,3}$/.test(part) && Number(part) <= 255 && String(Number(part)) === part);
 }
 
 const isDirectRun = process.argv[1] && process.argv[1].endsWith('enquiry-server.mjs');

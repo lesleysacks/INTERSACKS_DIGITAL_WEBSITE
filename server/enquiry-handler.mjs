@@ -102,7 +102,8 @@ export function handleEnquiry(request, options = {}) {
 
   const scriptUrl = String(env.APPS_SCRIPT_ENQUIRY_URL || '').trim();
   const token = String(env.ENQUIRY_PROXY_TOKEN || '');
-  if (!scriptUrl || token.length < 16) {
+  // 64 hex characters is 32 bytes, matching MIN_SECRET_LENGTH in EnquiryWebApp.gs.
+  if (!scriptUrl || token.length < 64) {
     return json(503, { ok: false, message: VISITOR_FAILURE_MESSAGE }, cors);
   }
 
