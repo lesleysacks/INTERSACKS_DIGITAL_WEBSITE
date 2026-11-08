@@ -4,10 +4,12 @@
  * and do not read or write the production spreadsheet.
  */
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
+import { signEnquiry } from '../../server/enquiry-handler.mjs';
 
 const source = readFileSync(fileURLToPath(new URL('../../apps-script/EnquiryWebApp.gs', import.meta.url)), 'utf8');
 const TOKEN = 'test-token-value-0123456789';
@@ -143,7 +145,11 @@ function load(options = {}) {
         assert.equal(Object.prototype.toString.call(date), '[object Date]');
         return options.stamp || '20261108';
       },
-      getUuid() { return '11111111-1111-4111-8111-111111111111'; }
+      getUuid() { return '11111111-1111-4111-8111-111111111111'; },
+      computeHmacSha256Signature(message, secret) {
+        const digest = crypto.createHmac('sha256', secret).update(String(message)).digest();
+        return Array.from(digest, (byte) => (byte > 127 ? byte - 256 : byte));
+      }
     },
     ContentService: {
       MimeType: { JSON: 'application/json' },
@@ -184,11 +190,31 @@ function validBody(overrides = {}) {
   };
 }
 
-function post(app, body) {
-  const output = app.doPost({ postData: { contents: JSON.stringify(body), type: 'application/json' } });
+function post(app, body, signing = {}) {
+  const fields = { ...body };
+  delete fields.token;
+  delete fields.timestamp;
+  delete fields.nonce;
+  delete fields.signature;
+  let payload = fields;
+  if (!signing.unsigned) {
+    const secret = signing.secret === undefined ? TOKEN : signing.secret;
+    const signed = signEnquiry(secret, fields, signing);
+    payload = {
+      ...fields,
+      timestamp: signed.timestamp,
+      nonce: signed.nonce,
+      signature: signing.signature || signed.signature
+    };
+    if (signing.tamper) {
+      payload.signature = (payload.signature[0] === '0' ? '1' : '0') + payload.signature.slice(1);
+    }
+  }
+  const output = app.doPost({ postData: { contents: JSON.stringify(payload), type: 'application/json' } });
   assert.equal(output.mime, 'application/json');
   assert.equal(output.text.includes(SPREADSHEET_ID), false);
   assert.equal(output.text.includes(TOKEN), false);
+  assert.equal(output.text.includes('signature'), false);
   return JSON.parse(output.text);
 }
 
@@ -427,14 +453,54 @@ test('values that could become formulas are stored as text', () => {
   assert.equal(lead[7].startsWith("'+"), true);
 });
 
-test('a missing or wrong proxy token does not write a lead', () => {
+test('a missing secret or a bad signature does not write a lead', () => {
   const missing = load({ token: '' });
-  assert.equal(post(missing, validBody({ token: '' })).code, 'CONFIG');
+  assert.equal(post(missing, validBody()).code, 'CONFIG');
   assert.equal(savedLeads(missing.leads).length, 0);
 
   const wrong = load();
-  assert.equal(post(wrong, validBody({ token: 'test-token-value-0123456780' })).code, 'UNAUTHORISED');
+  assert.equal(post(wrong, validBody(), { secret: 'test-token-value-0123456780' }).code, 'UNAUTHORISED');
+  assert.equal(post(wrong, validBody(), { tamper: true }).code, 'UNAUTHORISED');
+  assert.equal(post(wrong, validBody(), { unsigned: true }).code, 'UNAUTHORISED');
   assert.equal(savedLeads(wrong.leads).length, 0);
+});
+
+test('boolean consent from the browser still verifies', () => {
+  const app = load();
+  const result = post(app, validBody({ consent: true }));
+  assert.equal(result.ok, true);
+  assert.equal(savedLeads(app.leads)[0][10], 'Yes');
+});
+
+test('an expired signature is rejected and does not write a lead', () => {
+  const app = load();
+  const past = Math.floor(Date.now() / 1000) - 301;
+  const future = Math.floor(Date.now() / 1000) + 301;
+  assert.equal(post(app, validBody(), { timestamp: past }).code, 'EXPIRED');
+  assert.equal(post(app, validBody(), { timestamp: future, nonce: 'ffffffffffffffff' }).code, 'EXPIRED');
+  assert.equal(savedLeads(app.leads).length, 0);
+  assert.equal(app.errorLog.rows[1][1], 'EXPIRED');
+});
+
+test('a replayed nonce is rejected after the first accepted request', () => {
+  const app = load();
+  const nonce = 'replayed-nonce-0001';
+  const timestamp = Math.floor(Date.now() / 1000);
+  const first = post(app, validBody(), { nonce, timestamp });
+  const second = post(app, validBody(), { nonce, timestamp });
+  assert.equal(first.ok, true);
+  assert.equal(first.leadId, 'ISD-20261108-0001');
+  assert.equal(second.ok, false);
+  assert.equal(second.code, 'REPLAY');
+  assert.equal(savedLeads(app.leads).length, 1);
+  assert.equal(app.cacheStore.get('enquiry-nonce:' + nonce), '1');
+});
+
+test('nonce protection fails closed when the cache is unavailable', () => {
+  const app = load({ cacheThrows: true });
+  const result = post(app, validBody());
+  assert.equal(result.code, 'AUTH_UNAVAILABLE');
+  assert.equal(savedLeads(app.leads).length, 0);
 });
 
 test('an omitted submission key is generated and an invalid key is rejected', () => {

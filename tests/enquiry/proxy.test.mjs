@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import http from 'node:http';
 import test from 'node:test';
 import { createEnquiryServer } from '../../server/enquiry-server.mjs';
-import { handleEnquiry, VISITOR_FAILURE_MESSAGE } from '../../server/enquiry-handler.mjs';
+import { handleEnquiry, signEnquiry, SIGNED_FIELDS, VISITOR_FAILURE_MESSAGE } from '../../server/enquiry-handler.mjs';
 
 const TOKEN = 'proxy-token-value-0123456789';
 const SCRIPT_URL = 'https://script.google.com/macros/s/deployment-id/exec';
@@ -48,7 +48,9 @@ async function send(body, options = {}) {
   const result = await handleEnquiry(request(body, options.request), {
     env: env(options.env),
     fetchImpl,
-    rateLimit: options.rateLimit || rateLimit()
+    rateLimit: options.rateLimit || rateLimit(),
+    now: options.now,
+    timeoutMs: options.timeoutMs
   });
   return { result, calls, body: result.body ? JSON.parse(result.body) : null };
 }
@@ -74,13 +76,20 @@ test('a valid enquiry is forwarded and the visitor only receives the lead id', a
   assert.equal(calls[0].url.includes(TOKEN), false);
   assert.equal(calls[0].init.method, 'POST');
   assert.equal(calls[0].init.redirect, 'follow');
+  assert.equal(calls[0].init.signal instanceof AbortSignal, true);
   const upstream = JSON.parse(calls[0].init.body);
-  assert.equal(upstream.token, TOKEN);
+  const fields = {};
+  for (const key of SIGNED_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(enquiry, key)) fields[key] = enquiry[key];
+  }
+  const expected = signEnquiry(TOKEN, fields, { timestamp: upstream.timestamp, nonce: upstream.nonce });
+  assert.equal(upstream.signature, expected.signature);
+  assert.equal(Object.prototype.hasOwnProperty.call(upstream, 'token'), false);
   assert.equal(upstream.submissionKey, enquiry.submissionKey);
   assert.equal(upstream.email, enquiry.email);
-  assert.equal(Object.prototype.hasOwnProperty.call(upstream, 'unexpected'), false);
   assert.equal(result.body.includes(TOKEN), false);
   assert.equal(result.body.includes(SPREADSHEET_ID), false);
+  assert.equal(result.body.includes(upstream.signature), false);
 });
 
 test('backend failure and a non-JSON upstream response stay generic', async () => {
@@ -154,6 +163,67 @@ test('a disallowed origin is rejected before the upstream call', async () => {
   assert.equal(result.headers['Access-Control-Allow-Origin'], undefined);
 });
 
+test('an upstream timeout aborts the request and stays generic', async () => {
+  let aborted = false;
+  const { result, body } = await send(enquiry, {
+    timeoutMs: 30,
+    fetchImpl: (url, init) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        resolve({ status: 200, json: async () => ({ ok: true, leadId: 'ISD-late' }) });
+      }, 500);
+      init.signal.addEventListener('abort', () => {
+        aborted = true;
+        clearTimeout(timer);
+        const error = new Error('The operation was aborted');
+        error.name = 'AbortError';
+        reject(error);
+      });
+    })
+  });
+  assert.equal(aborted, true);
+  assert.equal(result.status, 504);
+  assert.equal(body.message, VISITOR_FAILURE_MESSAGE);
+  assert.equal(/abort|timeout|script\.google|Exception/i.test(result.body), false);
+});
+
+test('authentication failures from Apps Script are not shown to the visitor', async () => {
+  for (const code of ['UNAUTHORISED', 'EXPIRED', 'REPLAY']) {
+    const { result, body } = await send(enquiry, {
+      fetchImpl: async () => ({
+        status: 200,
+        json: async () => ({ ok: false, code, message: `Rejected ${code} for token ${TOKEN}` })
+      })
+    });
+    assert.equal(result.status, 502, code);
+    assert.equal(body.message, VISITOR_FAILURE_MESSAGE);
+    assert.equal(result.body.includes(TOKEN), false);
+    assert.equal(result.body.includes(code), false);
+  }
+});
+
+test('the in-memory limiter forgets idle addresses and caps the whole process', async () => {
+  const store = new Map();
+  const globalHits = [];
+  const limit = { limit: 1, windowMs: 1000, globalLimit: 10, globalWindowMs: 10000, store, globalHits };
+  const fetchImpl = async () => ({ status: 200, json: async () => ({ ok: true, leadId: 'ISD-20261108-0001' }) });
+  const first = await send(enquiry, { rateLimit: limit, fetchImpl, now: () => 1000, request: { ip: '198.51.100.8' } });
+  const blocked = await send(enquiry, { rateLimit: limit, fetchImpl, now: () => 1500, request: { ip: '198.51.100.8' } });
+  const later = await send(enquiry, { rateLimit: limit, fetchImpl, now: () => 2500, request: { ip: '198.51.100.8' } });
+  assert.equal(first.result.status, 200);
+  assert.equal(blocked.result.status, 429);
+  assert.equal(later.result.status, 200);
+  assert.equal(store.has('198.51.100.8'), true);
+
+  const globalStore = new Map();
+  const global = { limit: 5, windowMs: 60000, globalLimit: 2, globalWindowMs: 60000, store: globalStore, globalHits: [] };
+  const one = await send(enquiry, { rateLimit: global, fetchImpl, request: { ip: '198.51.100.1' } });
+  const two = await send(enquiry, { rateLimit: global, fetchImpl, request: { ip: '198.51.100.2' } });
+  const three = await send(enquiry, { rateLimit: global, fetchImpl, request: { ip: '198.51.100.3' } });
+  assert.equal(one.result.status, 200);
+  assert.equal(two.result.status, 200);
+  assert.equal(three.result.status, 429);
+});
+
 test('repeated calls from one address are rate limited', async () => {
   const limit = rateLimit();
   limit.limit = 2;
@@ -193,7 +263,10 @@ test('the HTTP server confirms a save and hides upstream failures', async () => 
     assert.equal(response.status, 200);
     assert.deepEqual(body, { ok: true, leadId: 'ISD-20261108-0009' });
     assert.equal(calls.length, 1);
-    assert.equal(JSON.parse(calls[0].init.body).token, TOKEN);
+    const upstream = JSON.parse(calls[0].init.body);
+    assert.equal(typeof upstream.signature, 'string');
+    assert.equal(upstream.signature.length, 64);
+    assert.equal(Object.prototype.hasOwnProperty.call(upstream, 'token'), false);
 
     const missing = await fetch(`http://127.0.0.1:${port}/api/other`, { method: 'POST' });
     assert.equal(missing.status, 404);

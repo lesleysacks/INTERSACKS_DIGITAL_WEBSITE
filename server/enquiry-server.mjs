@@ -15,9 +15,8 @@ export function createEnquiryServer(options = {}) {
   const env = options.env || process.env;
   const fetchImpl = options.fetchImpl;
   const rateLimit = options.rateLimit || {
-    limit: 8,
-    windowMs: 10 * 60 * 1000,
-    store: new Map()
+    store: new Map(),
+    globalHits: []
   };
 
   return http.createServer(async (req, res) => {

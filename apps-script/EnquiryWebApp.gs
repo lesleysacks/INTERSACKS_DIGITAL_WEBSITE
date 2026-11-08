@@ -21,6 +21,11 @@
  * Duplicate protection is the submission key only. A repeated key returns
  * the original lead and does not add a row. A second enquiry from the same
  * email address or phone number is a new lead.
+ *
+ * The proxy signs each request with HMAC-SHA256. The signed string is
+ * enquiry.v1, the unix timestamp, the nonce, and the enquiry JSON. It must
+ * match canonicalMessage in server/enquiry-handler.mjs. The raw secret is
+ * not sent. A nonce can be used once inside the acceptance window.
  */
 var SPREADSHEET_ID = '1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M';
 var LEADS_SHEET = 'Leads';
@@ -31,6 +36,20 @@ var LEAD_STATUS = 'NEW';
 var LEAD_PRIORITY = 'Medium';
 var RATE_LIMIT_PER_HOUR = 20;
 var LOCK_WAIT_MS = 15000;
+var AUTH_SKEW_SECONDS = 300;
+var NONCE_TTL_SECONDS = 600;
+var SIGNED_FIELDS = [
+  'name',
+  'email',
+  'business',
+  'phone',
+  'service',
+  'message',
+  'consent',
+  'page',
+  'submissionKey',
+  'fax_number'
+];
 
 var LEAD_HEADERS = [
   'Lead ID',
@@ -87,8 +106,8 @@ function doPost(e) {
   }
 
   var payload = parsed.payload;
-  var tokenState = tokenState_(payload);
-  if (tokenState === 'missing-config') {
+  var authState = signatureState_(payload);
+  if (authState === 'missing-config') {
     logError_('CONFIG', 'auth', '', 'The enquiry proxy token is not configured.');
     return json_({
       ok: false,
@@ -96,8 +115,16 @@ function doPost(e) {
       message: 'We could not save your enquiry. Please try again.'
     });
   }
-  if (tokenState !== 'ok') {
-    logError_('UNAUTHORISED', 'auth', '', 'Rejected a request with a missing or incorrect token.');
+  if (authState === 'expired') {
+    logError_('EXPIRED', 'auth', '', 'Rejected a request outside the acceptance window.');
+    return json_({
+      ok: false,
+      code: 'EXPIRED',
+      message: 'We could not save your enquiry. Please try again.'
+    });
+  }
+  if (authState !== 'ok') {
+    logError_('UNAUTHORISED', 'auth', '', 'Rejected a request with a missing or incorrect signature.');
     return json_({
       ok: false,
       code: 'UNAUTHORISED',
@@ -121,6 +148,24 @@ function doPost(e) {
         ok: false,
         code: 'LOCKED',
         message: 'Please try again in a moment.'
+      });
+    }
+
+    var nonceState = consumeNonce_(String(payload.nonce));
+    if (nonceState === 'replay') {
+      logError_('REPLAY', 'auth', '', 'Rejected a replayed nonce.');
+      return json_({
+        ok: false,
+        code: 'REPLAY',
+        message: 'We could not save your enquiry. Please try again.'
+      });
+    }
+    if (nonceState !== 'ok') {
+      logError_('AUTH_UNAVAILABLE', 'auth', '', 'Nonce replay protection was unavailable.');
+      return json_({
+        ok: false,
+        code: 'AUTH_UNAVAILABLE',
+        message: 'We could not save your enquiry. Please try again.'
       });
     }
 
@@ -243,21 +288,61 @@ function readPayload_(e) {
   }
 }
 
-function tokenState_(payload) {
-  var expected = '';
+function signatureState_(payload) {
+  var secret = '';
   try {
-    expected = PropertiesService.getScriptProperties().getProperty(TOKEN_PROPERTY) || '';
+    secret = PropertiesService.getScriptProperties().getProperty(TOKEN_PROPERTY) || '';
   } catch (propertyError) {
     return 'missing-config';
   }
-  if (!expected || expected.length < 16) return 'missing-config';
-  var provided = payload && payload.token ? String(payload.token) : '';
-  if (provided.length !== expected.length) return 'rejected';
+  if (!secret || secret.length < 16) return 'missing-config';
+  var timestamp = Number(payload.timestamp);
+  var nonce = String(payload.nonce || '');
+  var signature = String(payload.signature || '').toLowerCase();
+  if (!isFinite(timestamp) || Math.floor(timestamp) !== timestamp) return 'rejected';
+  if (!/^[A-Za-z0-9-]{16,80}$/.test(nonce)) return 'rejected';
+  if (!/^[0-9a-f]{64}$/.test(signature)) return 'rejected';
+  var nowSeconds = Math.floor(new Date().getTime() / 1000);
+  if (Math.abs(nowSeconds - timestamp) > AUTH_SKEW_SECONDS) return 'expired';
+  var expected = hmacHex_(secret, canonicalMessage_(payload, timestamp, nonce));
+  if (expected.length !== signature.length) return 'rejected';
   var mismatch = 0;
-  for (var i = 0; i < expected.length; i++) {
-    mismatch |= expected.charCodeAt(i) ^ provided.charCodeAt(i);
-  }
+  for (var i = 0; i < expected.length; i++) mismatch |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
   return mismatch === 0 ? 'ok' : 'rejected';
+}
+
+function canonicalMessage_(payload, timestamp, nonce) {
+  var fields = {};
+  for (var i = 0; i < SIGNED_FIELDS.length; i++) {
+    var key = SIGNED_FIELDS[i];
+    if (Object.prototype.hasOwnProperty.call(payload, key)) fields[key] = payload[key];
+  }
+  return 'enquiry.v1\n' + timestamp + '\n' + nonce + '\n' + JSON.stringify(fields);
+}
+
+function hmacHex_(secret, message) {
+  var bytes = Utilities.computeHmacSha256Signature(message, secret);
+  var hex = '';
+  for (var i = 0; i < bytes.length; i++) {
+    var value = bytes[i];
+    if (value < 0) value += 256;
+    var pair = value.toString(16);
+    hex += pair.length === 1 ? '0' + pair : pair;
+  }
+  return hex;
+}
+
+function consumeNonce_(nonce) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = 'enquiry-nonce:' + nonce;
+    if (cache.get(key)) return 'replay';
+    cache.put(key, '1', NONCE_TTL_SECONDS);
+    if (cache.get(key) !== '1') return 'unavailable';
+    return 'ok';
+  } catch (cacheError) {
+    return 'unavailable';
+  }
 }
 
 function validateEnquiry_(payload) {
