@@ -110,6 +110,15 @@ if (!enquiry.includes('mailto:lesleysacks1@gmail.com?subject=')) fail('enquiry h
 if (/script\.google|apps script|spreadsheet/i.test(enquiry)) fail('enquiry script gained an unexpected endpoint');
 if (enquiry.includes('privacy.html')) fail('privacy.html was added to the page-transition list');
 
+const enquiryForm = read('js/enquiry-form.js');
+if (!existsSync(join(root, 'apps-script/EnquiryWebApp.gs'))) fail('Apps Script enquiry web app is missing');
+if (enquiryForm.includes('1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M')) fail('spreadsheet id leaked into public javascript');
+if (/no-cors/i.test(enquiryForm)) fail('enquiry form uses no-cors fetch');
+if (!enquiryForm.includes('postMessage')) fail('enquiry form no longer waits for a confirmed Apps Script result');
+if (!read('contact.html').includes('js/enquiry-form.js')) fail('contact page does not load the enquiry controller');
+if (read('contact.html').includes('1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M')) fail('spreadsheet id leaked into contact.html');
+if (/OWNER_EMAIL|SPREADSHEET_ID|ENQUIRY_PROXY_TOKEN/.test(enquiryForm)) fail('script property names leaked into public javascript');
+
 const privacy = read('privacy.html');
 for (const phrase of [
   'G-Q85HJEHCZ7',
