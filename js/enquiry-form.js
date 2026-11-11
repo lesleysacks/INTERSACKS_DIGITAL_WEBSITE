@@ -167,7 +167,7 @@
         if (!button.getAttribute('data-label')) button.setAttribute('data-label', label.textContent);
         label.textContent = loading ? 'Sending enquiry' : button.getAttribute('data-label');
       }
-      var progress = button.querySelector ? button.querySelector('.send-progress') : null;
+      var progress = form.querySelector ? form.querySelector('.lead-progress') : null;
       if (progress) {
         if (loading) progress.removeAttribute('hidden');
         else progress.setAttribute('hidden', 'hidden');
