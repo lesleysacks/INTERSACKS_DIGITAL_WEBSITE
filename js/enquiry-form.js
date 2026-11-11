@@ -162,6 +162,16 @@
       button.disabled = loading;
       if (button.classList && button.classList.toggle) button.classList.toggle('is-loading', loading);
       button.setAttribute('aria-disabled', loading ? 'true' : 'false');
+      var label = button.querySelector ? button.querySelector('.send-label') : null;
+      if (label) {
+        if (!button.getAttribute('data-label')) button.setAttribute('data-label', label.textContent);
+        label.textContent = loading ? 'Sending enquiry' : button.getAttribute('data-label');
+      }
+      var progress = button.querySelector ? button.querySelector('.send-progress') : null;
+      if (progress) {
+        if (loading) progress.removeAttribute('hidden');
+        else progress.setAttribute('hidden', 'hidden');
+      }
     }
 
     function setStatus(text, isError, isSuccess) {

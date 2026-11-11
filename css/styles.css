@@ -1389,6 +1389,30 @@ outline:3px solid var(--focus);
 outline-offset:2px}
 .contact-form>label{
 margin-bottom:28px}
+.contact-form button{
+position:relative;
+overflow:hidden}
+.contact-form .send-progress{
+display:none;
+position:absolute;
+left:0;
+right:0;
+bottom:0;
+height:4px;
+background:rgba(8,20,35,.18)}
+.contact-form button.is-loading .send-progress{
+display:block}
+.contact-form .send-progress span{
+display:block;
+width:42%;
+height:100%;
+background:var(--navy);
+font-size:0;
+line-height:0;
+animation:enquiry-progress 1.05s ease-in-out infinite}
+@keyframes enquiry-progress{
+0%{transform:translateX(-130%)}
+100%{transform:translateX(280%)}}
 .form-note{
 font-size:10px;
 line-height:1.6;
