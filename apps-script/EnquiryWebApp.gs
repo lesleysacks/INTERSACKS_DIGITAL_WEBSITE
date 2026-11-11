@@ -106,7 +106,7 @@ function doGet() {
 function doPost(e) {
   var parsed = parseRequest(e);
   if (parsed.error) {
-    noteOperational_('INVALID_JSON');
+    noteOperational_(parsed.reason === 'no-event' ? 'INVALID_JSON_NO_EVENT' : 'INVALID_JSON');
     return respond_({
       ok: false,
       code: 'VALIDATION',
@@ -727,38 +727,73 @@ function runSafeSelfTest() {
 }
 
 function parseRequest(e) {
-  if (!e) return { error: true, format: 'json' };
+  if (!e) return { error: true, format: 'json', reason: 'no-event' };
+
+  var fromParameters = parametersPayload_(e.parameter);
+  if (fromParameters) return fromParameters;
 
   if (e.postData && typeof e.postData.contents === 'string') {
-    var type = String(e.postData.type || '').toLowerCase();
-    if (type.indexOf('application/json') !== -1 || type.indexOf('text/plain') !== -1) {
-      try {
-        var parsed = JSON.parse(e.postData.contents);
-        if (!parsed || typeof parsed !== 'object' || Object.prototype.toString.call(parsed) === '[object Array]') {
-          return { error: true, format: 'json' };
-        }
-        return { payload: parsed, format: 'json' };
-      } catch (err) {
-        return { error: true, format: 'json' };
-      }
+    var contents = e.postData.contents;
+    var trimmed = contents.replace(/^\s+/, '');
+    if (trimmed.charAt(0) === '{') {
+      var asJson = jsonPayload_(contents);
+      if (asJson) return asJson;
     }
-  }
-
-  if (e.parameter && typeof e.parameter === 'object') {
-    var payload = {};
-    var keys = [
-      'name', 'email', 'business', 'company', 'phone', 'service', 'message',
-      'page', 'submissionKey', 'submission_key', 'fax_number', 'bookingDate',
-      'booking_date', 'bookingDetails', 'booking_details', 'status', 'responseFormat'
-    ];
-    for (var i = 0; i < keys.length; i++) {
-      if (e.parameter[keys[i]] != null) payload[keys[i]] = e.parameter[keys[i]];
-    }
-    var format = String(payload.responseFormat || 'html').toLowerCase() === 'json' ? 'json' : 'html';
-    return { payload: payload, format: format };
+    var fromBody = parametersPayload_(decodeForm_(contents));
+    if (fromBody) return fromBody;
+    var fallbackJson = jsonPayload_(contents);
+    if (fallbackJson) return fallbackJson;
   }
 
   return { error: true, format: 'json' };
+}
+
+function jsonPayload_(contents) {
+  try {
+    var parsed = JSON.parse(contents);
+    if (!parsed || typeof parsed !== 'object' || Object.prototype.toString.call(parsed) === '[object Array]') return null;
+    return { payload: parsed, format: 'json' };
+  } catch (err) {
+    return null;
+  }
+}
+
+function parametersPayload_(parameter) {
+  if (!parameter || typeof parameter !== 'object') return null;
+  var payload = {};
+  var keys = [
+    'name', 'email', 'business', 'company', 'phone', 'service', 'message',
+    'page', 'submissionKey', 'submission_key', 'fax_number', 'bookingDate',
+    'booking_date', 'bookingDetails', 'booking_details', 'status', 'responseFormat'
+  ];
+  var found = false;
+  for (var i = 0; i < keys.length; i++) {
+    if (parameter[keys[i]] == null) continue;
+    var value = parameter[keys[i]];
+    if (Object.prototype.toString.call(value) === '[object Array]') value = value[0];
+    payload[keys[i]] = value;
+    found = true;
+  }
+  if (!found) return null;
+  var format = String(payload.responseFormat || 'html').toLowerCase() === 'json' ? 'json' : 'html';
+  return { payload: payload, format: format };
+}
+
+function decodeForm_(body) {
+  var out = {};
+  var parts = String(body || '').split('&');
+  for (var i = 0; i < parts.length; i++) {
+    if (!parts[i]) continue;
+    var pair = parts[i].split('=');
+    try {
+      var key = decodeURIComponent(String(pair[0] || '').replace(/\+/g, ' '));
+      var value = decodeURIComponent(String(pair.slice(1).join('=') || '').replace(/\+/g, ' '));
+      out[key] = value;
+    } catch (ignore) {
+      return {};
+    }
+  }
+  return out;
 }
 
 function respond_(result, format) {
