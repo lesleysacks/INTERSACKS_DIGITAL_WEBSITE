@@ -419,6 +419,9 @@ test('13. owner notification includes the enquiry details and requires attention
   assert.match(email.body, /084 325 2262/);
   assert.match(email.body, /brochure website/);
   assert.match(email.body, /not a confirmed booking/i);
+  assert.match(email.body, /Open this lead: https:\/\/docs\.google\.com\/spreadsheets\/d\//);
+  assert.match(email.htmlBody, /Open this lead in the sheet/);
+  assert.match(email.htmlBody, new RegExp('href="https://docs\\.google\\.com/spreadsheets/d/' + SPREADSHEET_ID + '/edit#range=A\\d+"'));
 });
 
 test('14. no duplicate spreadsheet rows for the same submission key', () => {

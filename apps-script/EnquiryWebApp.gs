@@ -617,12 +617,14 @@ function buildOwnerEmail(data) {
     'Message:',
     record.message,
     '',
-    'Spreadsheet: https://docs.google.com/spreadsheets/d/' + config.spreadsheetId + '/edit'
+    'Open this lead: ' + leadSheetUrl_(config.spreadsheetId, data.rowNumber)
   ].filter(function (line, index, lines) {
     return line !== '' || (lines[index - 1] !== '' && index !== 0);
   }).join('\n');
 
+  var sheetUrl = leadSheetUrl_(config.spreadsheetId, data.rowNumber);
   var htmlBody = [
+    '<p><a href="' + escapeHtml_(sheetUrl) + '">Open this lead in the sheet</a></p>',
     '<p><strong>A new website enquiry needs your attention.</strong></p>',
     '<p>Reference: <strong>' + escapeHtml_(reference) + '</strong><br>',
     'Enquiry status: ' + STATUS.RECEIVED + '<br>',
@@ -885,6 +887,13 @@ function setLeadStatus_(reference, enquiryStatus) {
 
 function shouldDispatchNotifications_() {
   return !getConfiguration().testMode;
+}
+
+function leadSheetUrl_(spreadsheetId, rowNumber) {
+  var url = 'https://docs.google.com/spreadsheets/d/' + spreadsheetId + '/edit';
+  var row = Number(rowNumber);
+  if (row > 1) url += '#range=A' + row;
+  return url;
 }
 
 function bookingNotes_(data) {
