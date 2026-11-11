@@ -453,6 +453,26 @@ test('html iframe response postMessages a public payload and allows framing', ()
   assert.match(html, /"status":"RECEIVED"/);
 });
 
+test('a form body is accepted when Apps Script does not supply parameters', () => {
+  const runtime = load();
+  const body = new URLSearchParams({ ...validEnquiry, responseFormat: 'json' }).toString();
+  const result = parseJson(runtime.sandbox.doPost({
+    postData: { type: 'application/x-www-form-urlencoded', contents: body }
+  }));
+  assert.equal(result.ok, true);
+  assert.match(result.reference, /^ISD-\d{8}-\d{4}$/);
+  assert.equal(leadRows(runtime.leads).length, 1);
+});
+
+test('running doPost with no request does not write a lead', () => {
+  const runtime = load();
+  const result = parseJson(runtime.sandbox.doPost());
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'VALIDATION');
+  assert.equal(leadRows(runtime.leads).length, 0);
+  assert.equal(runtime.logs.some((line) => line.indexOf('INVALID_JSON_NO_EVENT') !== -1), true);
+});
+
 test('formula and email-header injection are neutralised', () => {
   const runtime = load();
   const result = runtime.sandbox.processEnquiry({

@@ -106,7 +106,7 @@ function doGet() {
 function doPost(e) {
   var parsed = parseRequest(e);
   if (parsed.error) {
-    noteOperational_('INVALID_JSON');
+    noteOperational_(parsed.reason === 'no-event' ? 'INVALID_JSON_NO_EVENT' : 'INVALID_JSON');
     return respond_({
       ok: false,
       code: 'VALIDATION',
@@ -242,7 +242,7 @@ function validateEnquiry(data) {
       return { ok: false, message: 'Check the enquiry and try again.', logDetail: 'Submission key could not be generated.' };
     }
   }
-  if (!/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(submissionKey)) {
+  if (!new RegExp('^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').test(submissionKey)) {
     return { ok: false, message: 'Check the enquiry and try again.', logDetail: 'Submission key was invalid.' };
   }
 
@@ -268,7 +268,7 @@ function generateEnquiryReference(rows, now) {
   var stamp = Utilities.formatDate(when, 'Africa/Johannesburg', 'yyyyMMdd');
   var max = 0;
   for (var i = 1; i < rows.length; i++) {
-    var match = /^ISD-\d{8}-(\d+)$/.exec(String(rows[i][0] || '').trim());
+    var match = new RegExp('^ISD-\\d{8}-(\\d+)$').exec(String(rows[i][0] || '').trim());
     if (!match) continue;
     var sequence = Number(match[1]);
     if (sequence > max) max = sequence;
@@ -377,8 +377,8 @@ function saveEnquiry(data) {
     asText_(data.phoneNormalised)
   ]]);
 
-  if (/^[=+\-@]/.test(data.phone)) {
-    leads.getRange(nextRow, 5).setFormula('="' + data.phone.replace(/"/g, '""') + '"');
+  if (formulaPrefix_(data.phone)) {
+    leads.getRange(nextRow, 5).setFormula('="' + data.phone.split('"').join('""') + '"');
   }
 
   return {
@@ -395,8 +395,11 @@ function saveEnquiry(data) {
 
 function sendCustomerAcknowledgement(data) {
   var email = buildCustomerEmail(data);
+  var result = { ok: true, skipped: false, status: 'sent', channel: 'email-customer', email: email };
   if (!shouldDispatchNotifications_()) {
-    return { ok: true, skipped: true, status: 'skipped:test-mode', channel: 'email-customer', email: email };
+    result.skipped = true;
+    result.status = 'skipped:test-mode';
+    return result;
   }
   try {
     MailApp.sendEmail({
@@ -407,17 +410,21 @@ function sendCustomerAcknowledgement(data) {
       name: email.fromName,
       replyTo: email.replyTo
     });
-    return { ok: true, skipped: false, status: 'sent', channel: 'email-customer', email: email };
   } catch (mailError) {
     noteOperational_('CUSTOMER_EMAIL_FAILED');
-    return { ok: false, skipped: false, status: 'failed', channel: 'email-customer', email: email };
+    result.ok = false;
+    result.status = 'failed';
   }
+  return result;
 }
 
 function notifyBusinessOwner(data) {
   var email = buildOwnerEmail(data);
+  var result = { ok: true, skipped: false, status: 'sent', channel: 'email-owner', email: email };
   if (!shouldDispatchNotifications_()) {
-    return { ok: true, skipped: true, status: 'skipped:test-mode', channel: 'email-owner', email: email };
+    result.skipped = true;
+    result.status = 'skipped:test-mode';
+    return result;
   }
   try {
     MailApp.sendEmail({
@@ -427,11 +434,12 @@ function notifyBusinessOwner(data) {
       htmlBody: email.htmlBody,
       name: email.fromName
     });
-    return { ok: true, skipped: false, status: 'sent', channel: 'email-owner', email: email };
   } catch (mailError) {
     noteOperational_('OWNER_EMAIL_FAILED');
-    return { ok: false, skipped: false, status: 'failed', channel: 'email-owner', email: email };
+    result.ok = false;
+    result.status = 'failed';
   }
+  return result;
 }
 
 function sendWhatsAppNotification(data) {
@@ -719,38 +727,73 @@ function runSafeSelfTest() {
 }
 
 function parseRequest(e) {
-  if (!e) return { error: true, format: 'json' };
+  if (!e) return { error: true, format: 'json', reason: 'no-event' };
+
+  var fromParameters = parametersPayload_(e.parameter);
+  if (fromParameters) return fromParameters;
 
   if (e.postData && typeof e.postData.contents === 'string') {
-    var type = String(e.postData.type || '').toLowerCase();
-    if (type.indexOf('application/json') !== -1 || type.indexOf('text/plain') !== -1) {
-      try {
-        var parsed = JSON.parse(e.postData.contents);
-        if (!parsed || typeof parsed !== 'object' || Object.prototype.toString.call(parsed) === '[object Array]') {
-          return { error: true, format: 'json' };
-        }
-        return { payload: parsed, format: 'json' };
-      } catch (err) {
-        return { error: true, format: 'json' };
-      }
+    var contents = e.postData.contents;
+    var trimmed = contents.replace(/^\s+/, '');
+    if (trimmed.charAt(0) === '{') {
+      var asJson = jsonPayload_(contents);
+      if (asJson) return asJson;
     }
-  }
-
-  if (e.parameter && typeof e.parameter === 'object') {
-    var payload = {};
-    var keys = [
-      'name', 'email', 'business', 'company', 'phone', 'service', 'message',
-      'page', 'submissionKey', 'submission_key', 'fax_number', 'bookingDate',
-      'booking_date', 'bookingDetails', 'booking_details', 'status', 'responseFormat'
-    ];
-    for (var i = 0; i < keys.length; i++) {
-      if (e.parameter[keys[i]] != null) payload[keys[i]] = e.parameter[keys[i]];
-    }
-    var format = String(payload.responseFormat || 'html').toLowerCase() === 'json' ? 'json' : 'html';
-    return { payload: payload, format: format };
+    var fromBody = parametersPayload_(decodeForm_(contents));
+    if (fromBody) return fromBody;
+    var fallbackJson = jsonPayload_(contents);
+    if (fallbackJson) return fallbackJson;
   }
 
   return { error: true, format: 'json' };
+}
+
+function jsonPayload_(contents) {
+  try {
+    var parsed = JSON.parse(contents);
+    if (!parsed || typeof parsed !== 'object' || Object.prototype.toString.call(parsed) === '[object Array]') return null;
+    return { payload: parsed, format: 'json' };
+  } catch (err) {
+    return null;
+  }
+}
+
+function parametersPayload_(parameter) {
+  if (!parameter || typeof parameter !== 'object') return null;
+  var payload = {};
+  var keys = [
+    'name', 'email', 'business', 'company', 'phone', 'service', 'message',
+    'page', 'submissionKey', 'submission_key', 'fax_number', 'bookingDate',
+    'booking_date', 'bookingDetails', 'booking_details', 'status', 'responseFormat'
+  ];
+  var found = false;
+  for (var i = 0; i < keys.length; i++) {
+    if (parameter[keys[i]] == null) continue;
+    var value = parameter[keys[i]];
+    if (Object.prototype.toString.call(value) === '[object Array]') value = value[0];
+    payload[keys[i]] = value;
+    found = true;
+  }
+  if (!found) return null;
+  var format = String(payload.responseFormat || 'html').toLowerCase() === 'json' ? 'json' : 'html';
+  return { payload: payload, format: format };
+}
+
+function decodeForm_(body) {
+  var out = {};
+  var parts = String(body || '').split('&');
+  for (var i = 0; i < parts.length; i++) {
+    if (!parts[i]) continue;
+    var pair = parts[i].split('=');
+    try {
+      var key = decodeURIComponent(String(pair[0] || '').replace(/\+/g, ' '));
+      var value = decodeURIComponent(String(pair.slice(1).join('=') || '').replace(/\+/g, ' '));
+      out[key] = value;
+    } catch (ignore) {
+      return {};
+    }
+  }
+  return out;
 }
 
 function respond_(result, format) {
@@ -812,7 +855,7 @@ function setLeadStatus_(reference, enquiryStatus) {
   var sheetStatus = SHEET_STATUS[enquiryStatus];
   if (!sheetStatus) return { ok: false, code: 'VALIDATION', message: 'Unknown status.' };
   var id = cleanText_(reference, 40);
-  if (!/^ISD-\d{8}-\d{4}$/.test(id)) return { ok: false, code: 'VALIDATION', message: 'Unknown enquiry reference.' };
+  if (!new RegExp('^ISD-\\d{8}-\\d{4}$').test(id)) return { ok: false, code: 'VALIDATION', message: 'Unknown enquiry reference.' };
 
   var config = getConfiguration();
   var lock = LockService.getScriptLock();
@@ -864,17 +907,17 @@ function normalisePhone(raw) {
   var original = String(raw == null ? '' : raw).trim();
   if (!original) return { ok: false, missing: true };
   if (original.length > 40) return { ok: false };
-  var compact = original.replace(/[\s()./-]/g, '');
-  if (!/^\+?\d+$/.test(compact)) return { ok: false };
+  var compact = original.replace(new RegExp('[\\s()./-]', 'g'), '');
+  if (!new RegExp('^\\+?\\d+$').test(compact)) return { ok: false };
   var digits = compact.charAt(0) === '+' ? compact.slice(1) : compact;
   if (digits.length === 11 && digits.slice(0, 2) === '27') {
     var saFromIntl = digits.slice(2);
-    if (!/^[1-9][0-9]{8}$/.test(saFromIntl)) return { ok: false };
+    if (!new RegExp('^[1-9][0-9]{8}$').test(saFromIntl)) return { ok: false };
     return { ok: true, original: original, normalised: '+27' + saFromIntl };
   }
   if (digits.length === 10 && digits.charAt(0) === '0') {
     var saFromLocal = digits.slice(1);
-    if (!/^[1-9][0-9]{8}$/.test(saFromLocal)) return { ok: false };
+    if (!new RegExp('^[1-9][0-9]{8}$').test(saFromLocal)) return { ok: false };
     return { ok: true, original: original, normalised: '+27' + saFromLocal };
   }
   if (compact.charAt(0) === '+' && digits.length >= 8 && digits.length <= 15 && digits.charAt(0) !== '0') {
@@ -884,7 +927,7 @@ function normalisePhone(raw) {
 }
 
 function cleanText_(value, maxLength) {
-  return String(value == null ? '' : value).replace(/\s+/g, ' ').trim().slice(0, maxLength);
+  return String(value == null ? '' : value).replace(new RegExp('\\s+', 'g'), ' ').trim().slice(0, maxLength);
 }
 
 function cleanPage_(value) {
@@ -894,18 +937,23 @@ function cleanPage_(value) {
   if (new RegExp('^https?:\\/\\/', 'i').test(page)) return '';
   if (page.charAt(0) !== '/') page = '/' + page;
   if (page.length > 200 || page.indexOf('//') !== -1) return '';
-  if (!/^\/[A-Za-z0-9._~/-]*$/.test(page)) return '';
+  if (!new RegExp('^/[A-Za-z0-9._~/-]*$').test(page)) return '';
   return page;
 }
 
 function isEmail_(value) {
   if (!value || value.length > 254) return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(value) && value.indexOf('..') === -1;
+  return new RegExp('^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$').test(value) && value.indexOf('..') === -1;
+}
+
+function formulaPrefix_(value) {
+  var lead = String(value == null ? '' : value).charAt(0);
+  return lead === '=' || lead === '+' || lead === '-' || lead === '@';
 }
 
 function asText_(value) {
   var text = String(value == null ? '' : value);
-  if (/^[=+\-@]/.test(text)) return "'" + text;
+  if (formulaPrefix_(text)) return "'" + text;
   return text;
 }
 
@@ -972,22 +1020,22 @@ function readProp_(props, name) {
 }
 
 function safeHeader_(value) {
-  return String(value || '').replace(/[\r\n\0]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(value || '').replace(new RegExp('[\\r\\n\\u0000]+', 'g'), ' ').replace(new RegExp('\\s+', 'g'), ' ').trim();
 }
 
 function escapeHtml_(value) {
   return String(value == null ? '' : value)
-    .replace(/&/g, '&amp;')
+    .replace(new RegExp('&', 'g'), '&amp;')
     .replace(new RegExp('<', 'g'), '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(new RegExp('>', 'g'), '&gt;')
+    .replace(new RegExp('"', 'g'), '&quot;');
 }
 
 function safeDetail_(text) {
   var config = getConfiguration();
-  var detail = String(text || '').replace(/\s+/g, ' ').trim();
-  detail = detail.replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[redacted]');
-  detail = detail.replace(/\+?\d[\d\s().-]{6,}\d/g, '[redacted]');
+  var detail = String(text || '').replace(new RegExp('\\s+', 'g'), ' ').trim();
+  detail = detail.replace(new RegExp('[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}', 'gi'), '[redacted]');
+  detail = detail.replace(new RegExp('\\+?\\d[\\d\\s().-]{6,}\\d', 'g'), '[redacted]');
   if (config.spreadsheetId && detail.indexOf(config.spreadsheetId) !== -1) {
     detail = detail.split(config.spreadsheetId).join('[redacted]');
   }
