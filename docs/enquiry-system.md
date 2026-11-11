@@ -4,7 +4,13 @@ The contact form on `contact.html` posts to a Google Apps Script web app. Apps S
 
 This is not a confirmed booking. Website submissions are stored as **RECEIVED**. Only an authorised business action can change an enquiry to **CONFIRMED**.
 
-Do not merge the live `data-enquiry-endpoint` value until the web app has been deployed and verified. Until that URL is set, the form keeps the existing mailto hand-off to `lesleysacks1@gmail.com`.
+`#contact-form` now posts to the Apps Script web app URL supplied for this site:
+
+`https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec`
+
+The published GitHub Pages page still uses mailto until this change is merged. The form does not use `fetch` with `no-cors`, because that response cannot prove the enquiry was saved.
+
+An anonymous request to that URL on 11 November 2026 was redirected to a Google sign-in page. The web app is not available to visitors until the deployment is set to execute as **Me** and access **Anyone**, and a new version is deployed. Until then the contact page will wait and then show a failure. It will not show a success message.
 
 ## Architecture
 
@@ -115,14 +121,14 @@ These values were read from the live site and the existing spreadsheet on 11 Nov
 | Item | Confirmed value |
 | --- | --- |
 | Live host | GitHub Pages (`server: GitHub.com`) at `https://www.intersacks.co.za/contact.html` |
-| Live submit behaviour | `js/script.js` opens `mailto:lesleysacks1@gmail.com`. The form has no `action` and no Apps Script URL |
+| Live submit behaviour on 11 November 2026 | The published page opened `mailto:lesleysacks1@gmail.com`. This branch now sets the supplied `/exec` URL on `#contact-form` |
 | Spreadsheet | `InterSacks – Enquiries`, id `1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M` |
 | Worksheet | `Leads`, 21 columns, header row frozen |
 | Counted formula | Present in `Leads!U2`. Data columns A–T on row 2 are empty |
 | Lists statuses | `NEW`, `CONTACTED`, `QUALIFIED`, `QUOTED`, `WON`, `LOST`, `SPAM` |
 | Public studio email | `lesleysacks1@gmail.com`, already printed on the contact page |
 
-No Apps Script `/exec` URL exists in the repository or on the published contact page. The deployment id, version number, and whether a project already exists must be confirmed in the Apps Script dashboard. Do not invent them.
+The owner supplied the web app URL now stored on `#contact-form`. The deployment version and script properties still have to be confirmed in the Apps Script dashboard. The published contact page does not use this URL until the change is merged.
 
 ## Safe verification procedure
 
@@ -133,7 +139,7 @@ Do not send a production enquiry until you approve that the row may remain on `L
 3. Deploy a new web-app version: execute as **Me**, access **Anyone**. Authorise Sheets and Mail when Google asks. A website POST while `ENVIRONMENT` is `test` must return `TEST_MODE` and must not add a `Leads` row.
 4. Approve one clearly labelled trial, then set `ENVIRONMENT=production` and submit once from the deployed `/exec` URL with a name such as `TEST ENQUIRY — DELETE IF NOT NEEDED`.
 5. Confirm exactly one new `Leads` row, an `ISD-` reference, an owner email, and a customer email. Confirm the row status is `NEW` and the notes show `customer=sent; owner=sent`.
-6. Only then put that `/exec` URL in `data-enquiry-endpoint` and publish the website.
+6. The supplied `/exec` URL is already on `#contact-form`. Publish the website only after the trial row, reference, and both emails are confirmed.
 
 `npm test` is a simulated in-memory run. A passing mock is not evidence that the live website, spreadsheet, or email delivery works.
 
@@ -144,4 +150,4 @@ Do not send a production enquiry until you approve that the row may remain on `L
 3. Deploy a new web-app version. Leave the previous version in place until this one is verified.
 4. Run `runSafeSelfTest` in the editor.
 5. Send one real enquiry only when you want that row on the production `Leads` tab.
-6. Then set `data-enquiry-endpoint` on `#contact-form` and merge.
+6. Merge and publish only after that trial. `#contact-form` already has the supplied `/exec` URL.

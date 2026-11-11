@@ -271,6 +271,16 @@ test('missing phone is caught before submit', () => {
   assert.match(runtime.form.status.textContent, /phone/i);
 });
 
+test('contact form posts to the supplied Apps Script web app', () => {
+  const page = readFileSync(fileURLToPath(new URL('../../contact.html', import.meta.url)), 'utf8');
+  const endpoint = 'https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec';
+  assert.match(page, /id="contact-form"/);
+  assert.match(page, new RegExp('action="' + endpoint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"'));
+  assert.match(page, new RegExp('data-enquiry-endpoint="' + endpoint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '"'));
+  assert.equal(/no-cors|mode:\s*["']no-cors["']/.test(page), false);
+  assert.equal(/Thank you! Your enquiry has been sent/.test(page), false);
+});
+
 test('script.js keeps the mailto recipient and does not embed Apps Script', () => {
   assert.match(scriptSource, /mailto:lesleysacks1@gmail.com\?subject=/);
   assert.equal(/script\.google|spreadsheet/i.test(scriptSource), false);
