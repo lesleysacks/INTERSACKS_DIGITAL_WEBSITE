@@ -14,6 +14,7 @@ This website serves as a premium digital storefront for Lesley Sacks, a web deve
 - **Micro-Animations:** Fluid scroll-reveal transitions and interactive skill progress indicators driven by high-performance `IntersectionObserver` elements.
 - **Handcrafted Responsive Grid:** A mobile-first design adapted for phones, tablets, laptops, and large screens.
 - **Client-Side Form Validation:** Dynamic, real-time error validation on the contact form with custom, user-friendly messages.
+- **Enquiry backend:** Google Apps Script `doPost` saves the enquiry to the existing Leads sheet and emails the customer and owner. See `docs/enquiry-system.md`.
 - **Accessible & Semantic HTML5:** Structured with semantic landmarks, keyboard focus states, alt attributes, and high text contrasts.
 - **SEO Ready:** Complete metadata, description tags, canonical definitions, responsive viewports, Open Graph integrations, and a dynamic fallback SVG favicon.
 

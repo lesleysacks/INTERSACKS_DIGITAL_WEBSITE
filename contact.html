@@ -29,6 +29,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/styles.css">
   <script src="js/analytics.js" defer></script>
+  <script src="js/enquiry-form.js" defer></script>
   <script src="js/script.js" defer></script>
 </head>
 <body>
@@ -60,13 +61,15 @@
         </div>
         <a class="text-link dark-link contact-whatsapp" href="https://wa.me/27843252262?text=Hello%20InterSacks%20Digital%2C%20I%20would%20like%20to%20start%20a%20project." target="_blank" rel="noopener noreferrer">Chat on WhatsApp <span>↗</span></a>
       </div>
-      <form class="contact-form reveal" id="contact-form">
-        <div class="form-row"><label>Full name<input type="text" name="name" autocomplete="name" required></label><label>Email address<input type="email" name="email" autocomplete="email" required></label></div>
-        <div class="form-row"><label>Business name<input type="text" name="business" autocomplete="organization"></label><label>Phone number<input type="tel" name="phone" autocomplete="tel"></label></div>
+      <form class="contact-form reveal" id="contact-form" method="post" target="enquiry-response" action="https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec" data-enquiry-endpoint="https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec" aria-describedby="form-status">
+        <div class="form-row"><label>Full name<input type="text" name="name" autocomplete="name" maxlength="120" required></label><label>Email address<input type="email" name="email" autocomplete="email" maxlength="254" required></label></div>
+        <div class="form-row"><label>Business name<input type="text" name="business" autocomplete="organization" maxlength="160"></label><label>Phone number<input type="tel" name="phone" autocomplete="tel" inputmode="tel" maxlength="40" required></label></div>
         <fieldset><legend>What can we help with?</legend><div class="service-choice"><label><input type="radio" name="service" value="Web Solutions" required><span>Web Solutions</span></label><label><input type="radio" name="service" value="Branding"><span>Branding</span></label><label><input type="radio" name="service" value="Business Automation"><span>Automation</span></label><label><input type="radio" name="service" value="AI & Software"><span>AI & Software</span></label></div></fieldset>
-        <label>Tell us a little about the project<textarea name="message" rows="5" required></textarea></label>
+        <label>Tell us a little about the project<textarea name="message" rows="5" maxlength="4000" required></textarea></label>
+        <div class="enquiry-hp" aria-hidden="true"><label>Company fax<input type="text" name="fax_number" tabindex="-1" autocomplete="off"></label></div>
         <button class="button button-gold" type="submit">Send enquiry <span>↗</span></button>
-        <p class="form-note">Submitting opens your email app with the enquiry ready to send.</p>
+        <p class="form-note" id="form-status" role="status" aria-live="polite" aria-atomic="true">This form sends an enquiry. It is not a confirmed booking.</p>
+        <iframe name="enquiry-response" id="enquiry-response" title="Enquiry submission result" hidden aria-hidden="true"></iframe>
       </form>
     </section>
   </main>

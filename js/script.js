@@ -89,24 +89,31 @@ document.addEventListener('DOMContentLoaded', () => {
     revealElements.forEach((element) => element.classList.add('visible'));
   }
 
-  // Static-site form handoff: create a ready-to-send email without a backend.
+  // Enquiry posts to the configured form endpoint when one is present.
+  // Until that URL is set, keep the existing mailto hand-off so the live site
+  // still sends the enquiry to lesleysacks1@gmail.com.
   const contactForm = document.querySelector('#contact-form');
-  if (contactForm) {
+  const mailtoFallback = (form) => {
+    const data = new FormData(form);
+    const subject = `New ${data.get('service')} enquiry from ${data.get('name')}`;
+    const body = [
+      `Name: ${data.get('name')}`,
+      `Email: ${data.get('email')}`,
+      `Business: ${data.get('business') || 'Not provided'}`,
+      `Phone: ${data.get('phone') || 'Not provided'}`,
+      `Service: ${data.get('service')}`,
+      '',
+      'Project details:',
+      data.get('message')
+    ].join('\n');
+    window.location.href = `mailto:lesleysacks1@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+  if (contactForm && typeof window.createEnquiryController === 'function') {
+    window.createEnquiryController({ form: contactForm, mailtoFallback });
+  } else if (contactForm) {
     contactForm.addEventListener('submit', (event) => {
       event.preventDefault();
-      const data = new FormData(contactForm);
-      const subject = `New ${data.get('service')} enquiry from ${data.get('name')}`;
-      const body = [
-        `Name: ${data.get('name')}`,
-        `Email: ${data.get('email')}`,
-        `Business: ${data.get('business') || 'Not provided'}`,
-        `Phone: ${data.get('phone') || 'Not provided'}`,
-        `Service: ${data.get('service')}`,
-        '',
-        'Project details:',
-        data.get('message')
-      ].join('\n');
-      window.location.href = `mailto:lesleysacks1@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      mailtoFallback(contactForm);
     });
   }
 
