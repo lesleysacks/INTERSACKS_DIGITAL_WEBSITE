@@ -20,7 +20,7 @@ contact.html
 
 There is no Node proxy, no extra database, and no `onFormSubmit` trigger. A normal website enquiry is a `doPost` request.
 
-Google Apps Script does not answer browser `fetch` CORS preflights for `application/json`. A `no-cors` fetch would return an opaque response that cannot prove the row was saved. The form therefore uses a native POST into a hidden iframe. `doPost` returns an `HtmlService` page with `XFrameOptionsMode.ALLOWALL` that `postMessage`s the result to `https://www.intersacks.co.za` or `https://intersacks.co.za`. The page treats the enquiry as saved only when that message includes an `ISD-` reference from a `script.googleusercontent.com` origin.
+Google Apps Script does not answer browser `fetch` CORS preflights for `application/json`. A `no-cors` fetch would return an opaque response that cannot prove the row was saved. The form therefore uses a native POST into a hidden iframe. `doPost` returns an `HtmlService` page with `XFrameOptionsMode.ALLOWALL`. That page posts the result to each ancestor frame. The contact page treats the enquiry as saved only when the message includes an `ISD-` reference and the sender origin is `script.google.com` or `*.script.googleusercontent.com`. The posted result has no email address and no spreadsheet id. A saved row whose customer email failed is shown as saved, with the reference, and the page says the email was not sent.
 
 ## Spreadsheet compatibility
 
@@ -62,7 +62,7 @@ Project settings > Script properties:
 | `ERROR_SHEET_NAME` | No | Defaults to `Error Log` |
 | `OWNER_EMAIL` | Yes | Owner notification recipient. Never sent to the website |
 | `ENVIRONMENT` | Yes | `production` or `test`. `test` skips MailApp so test runs cannot email real customers |
-| `ALLOWED_ORIGINS` | No | Comma-separated origins allowed to receive `postMessage`. Defaults to the two InterSacks HTTPS origins |
+| `ALLOWED_ORIGINS` | No | Kept for compatibility. The reply is accepted by the website from the Google origin, not from this list |
 | `WHATSAPP_ENABLED` | No | Must stay `false`. The WhatsApp function is a stub for a later official API |
 | `BUSINESS_NAME` | No | Defaults to `InterSacks Digital` |
 | `BUSINESS_EMAIL` | No | Customer-facing reply address. Defaults to the public studio email |
@@ -107,6 +107,35 @@ node scripts/check-seo.mjs
 `npm test` uses an in-memory spreadsheet and a fake MailApp. It does not open Google and does not send mail.
 
 In the Apps Script editor, `ENVIRONMENT=test` skips MailApp. `runSafeSelfTest()` validates samples without writing production rows. Do not point an experimental script at the production `Leads` tab unless that row should remain.
+
+## What is already confirmed
+
+These values were read from the live site and the existing spreadsheet on 11 November 2026. They are not guesses.
+
+| Item | Confirmed value |
+| --- | --- |
+| Live host | GitHub Pages (`server: GitHub.com`) at `https://www.intersacks.co.za/contact.html` |
+| Live submit behaviour | `js/script.js` opens `mailto:lesleysacks1@gmail.com`. The form has no `action` and no Apps Script URL |
+| Spreadsheet | `InterSacks – Enquiries`, id `1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M` |
+| Worksheet | `Leads`, 21 columns, header row frozen |
+| Counted formula | Present in `Leads!U2`. Data columns A–T on row 2 are empty |
+| Lists statuses | `NEW`, `CONTACTED`, `QUALIFIED`, `QUOTED`, `WON`, `LOST`, `SPAM` |
+| Public studio email | `lesleysacks1@gmail.com`, already printed on the contact page |
+
+No Apps Script `/exec` URL exists in the repository or on the published contact page. The deployment id, version number, and whether a project already exists must be confirmed in the Apps Script dashboard. Do not invent them.
+
+## Safe verification procedure
+
+Do not send a production enquiry until you approve that the row may remain on `Leads`.
+
+1. Paste the script into the existing project, or create one project only if none exists. Set `ENVIRONMENT=test`.
+2. Run `runSafeSelfTest()` in the editor. It does not write a lead.
+3. Deploy a new web-app version: execute as **Me**, access **Anyone**. Authorise Sheets and Mail when Google asks.
+4. Approve one clearly labelled trial, then set `ENVIRONMENT=production` and submit once from the deployed `/exec` URL with a name such as `TEST ENQUIRY — DELETE IF NOT NEEDED`.
+5. Confirm exactly one new `Leads` row, an `ISD-` reference, an owner email, and a customer email. Confirm the row status is `NEW` and the notes show `customer=sent; owner=sent`.
+6. Only then put that `/exec` URL in `data-enquiry-endpoint` and publish the website.
+
+`npm test` is a simulated in-memory run. A passing mock is not evidence that the live website, spreadsheet, or email delivery works.
 
 ## Manual steps still required
 

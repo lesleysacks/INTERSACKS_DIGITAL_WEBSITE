@@ -94,9 +94,13 @@
       finishPending();
 
       if (data.ok === true && typeof data.reference === 'string' && /^ISD-\d{8}-\d+$/.test(data.reference.trim())) {
+        var reference = data.reference.trim();
+        if (data.customerEmail === 'failed') {
+          setStatus('Your enquiry was saved. Your reference is ' + reference + '. We could not send the email acknowledgement. Submit again to retry the email. This is not a confirmed booking.', true, false);
+          return;
+        }
         if (typeof form.reset === 'function') form.reset();
         submissionKey = '';
-        var reference = data.reference.trim();
         setStatus('Thank you. Your enquiry has been received. Your reference is ' + reference + '. This is not a confirmed booking.', false, true);
         return;
       }

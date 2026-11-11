@@ -342,6 +342,17 @@ test('8. email notification failure still keeps the saved enquiry', () => {
   assert.equal(runtime.mail.sent.length, 0);
   assert.match(String(runtime.leads.rows[1][16]), /customer=failed/);
   assert.match(String(runtime.leads.rows[1][16]), /owner=failed/);
+  assert.equal(result.customerEmail, 'failed');
+  assert.equal(JSON.stringify(result).includes('customer@example.co.za'), false);
+});
+
+test('a missing Leads worksheet does not report success', () => {
+  const runtime = load({ omitLeads: true });
+  const result = parseJson(runtime.sandbox.doPost(jsonPost(validEnquiry)));
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'SHEET_MISSING');
+  assert.equal(result.reference, undefined);
+  assert.equal(runtime.mail.sent.length, 0);
 });
 
 test('9. concurrent lock contention does not write a duplicate row', () => {
@@ -433,7 +444,9 @@ test('html iframe response postMessages a public payload and allows framing', ()
   const output = runtime.sandbox.doPost(formPost(validEnquiry));
   assert.equal(output.xframe, 'ALLOWALL');
   const html = output.getContent();
-  assert.match(html, /postMessage/);
+  assert.match(html, /postMessage\(payload,"\*"\)/);
+  assert.match(html, /win\.parent/);
+  assert.equal(html.includes('document.referrer'), false);
   assert.equal(html.includes('owner@example.co.za'), false);
   assert.equal(html.includes(SPREADSHEET_ID), false);
   assert.match(html, /"ok":true/);

@@ -458,19 +458,26 @@ function createHtmlResponse(data) {
   var json = JSON.stringify(payload)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026');
-  var allowed = JSON.stringify(getConfiguration().allowedOrigins);
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  // Google's web-app redirect often replaces document.referrer, and the
+  // HtmlService page can sit inside a nested frame. Walk every ancestor and
+  // post the public payload with target "*". The contact page accepts the
+  // message only from script.google.com or *.script.googleusercontent.com.
+  // The payload has no email address and no spreadsheet id.
   var html = [
     '<!doctype html><html><head><meta charset="utf-8"></head><body><script>',
     '(function(){',
     'var payload=' + json + ';',
-    'var allowed=' + allowed + ';',
-    'var referrer="";',
-    'try{referrer=document.referrer||"";}catch(e){}',
-    'var target="";',
-    'for(var i=0;i<allowed.length;i++){if(referrer.indexOf(allowed[i])===0){target=allowed[i];break;}}',
-    'if(!target){target=allowed[0]||"*";}',
-    'try{window.top.postMessage(payload,target);}catch(e){}',
+    'var win=window;',
+    'var guard=0;',
+    'while(win&&guard<5){',
+    'try{win.postMessage(payload,"*");}catch(e){}',
+    'if(!win.parent||win.parent===win)break;',
+    'win=win.parent;',
+    'guard++;',
+    '}',
     '})();',
     '<\/script></body></html>'
   ].join('');
@@ -707,12 +714,17 @@ function respond_(result, format) {
 
 function publicPayload_(data) {
   if (data && data.ok === true) {
+    var customerEmail = 'unknown';
+    if (data.notifications && data.notifications.customer && data.notifications.customer.status) {
+      customerEmail = String(data.notifications.customer.status);
+    }
     return {
       ok: true,
       channel: CHANNEL,
       duplicate: data.duplicate === true,
       reference: String(data.reference || ''),
       status: STATUS.RECEIVED,
+      customerEmail: customerEmail,
       submissionKey: String(data.submissionKey || ''),
       message: String(data.message || 'Thank you. Your enquiry has been received.')
     };

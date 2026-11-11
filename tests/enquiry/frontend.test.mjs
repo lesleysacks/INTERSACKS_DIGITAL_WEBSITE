@@ -184,6 +184,39 @@ test('success is shown only after a trusted postMessage with a reference', () =>
   assert.equal(runtime.form.button.disabled, false);
 });
 
+test('a saved enquiry with a failed email is not described as emailed', () => {
+  const runtime = loadController();
+  runtime.controller.onSubmit({ preventDefault() {} });
+  runtime.controller.onMessage({
+    origin: 'https://n-abc123-script.googleusercontent.com',
+    data: {
+      ok: true,
+      channel: 'intersacks-enquiry',
+      reference: 'ISD-20261110-0002',
+      customerEmail: 'failed',
+      submissionKey: '22222222-2222-4222-8222-222222222222',
+      status: 'RECEIVED'
+    }
+  });
+  assert.equal(runtime.form.resetCount, 0);
+  assert.match(runtime.form.status.textContent, /ISD-20261110-0002/);
+  assert.match(runtime.form.status.textContent, /could not send the email/i);
+  assert.match(runtime.form.status.textContent, /not a confirmed booking/i);
+  assert.equal(runtime.form.status.classList.contains('is-success'), false);
+});
+
+test('success without an enquiry reference is rejected', () => {
+  const runtime = loadController();
+  runtime.controller.onSubmit({ preventDefault() {} });
+  runtime.controller.onMessage({
+    origin: 'https://n-abc123-script.googleusercontent.com',
+    data: { ok: true, channel: 'intersacks-enquiry', reference: '', status: 'RECEIVED' }
+  });
+  assert.equal(runtime.form.resetCount, 0);
+  assert.equal(runtime.form.status.classList.contains('is-success'), false);
+  assert.match(runtime.form.status.textContent, /could not send/i);
+});
+
 test('an iframe load or opaque response is not treated as success', () => {
   const runtime = loadController();
   runtime.controller.onSubmit({ preventDefault() {} });
