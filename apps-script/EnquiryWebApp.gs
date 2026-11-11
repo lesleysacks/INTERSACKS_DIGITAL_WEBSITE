@@ -499,18 +499,20 @@ function createJsonResponse(data) {
 function createHtmlResponse(data) {
   var payload = publicPayload_(data);
   var json = JSON.stringify(payload)
-    .replace(/</g, '\\u003c')
-    .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026')
-    .replace(/\u2028/g, '\\u2028')
-    .replace(/\u2029/g, '\\u2029');
+    .replace(new RegExp('<', 'g'), '\\u003c')
+    .replace(new RegExp('>', 'g'), '\\u003e')
+    .replace(new RegExp('&', 'g'), '\\u0026')
+    .replace(new RegExp('\\u2028', 'g'), '\\u2028')
+    .replace(new RegExp('\\u2029', 'g'), '\\u2029');
   // Google's web-app redirect often replaces document.referrer, and the
   // HtmlService page can sit inside a nested frame. Walk every ancestor and
   // post the public payload with target "*". The contact page accepts the
   // message only from script.google.com or *.script.googleusercontent.com.
   // The payload has no email address and no spreadsheet id.
+  // The Apps Script editor parses the source as HTML. A literal script tag
+  // makes it report "Unexpected token ':'" further down the file.
   var html = [
-    '<!doctype html><html><head><meta charset="utf-8"></head><body><script>',
+    '<!doctype html><html><head><meta charset="utf-8"><' + '/head><body><' + 'script>',
     '(function(){',
     'var payload=' + json + ';',
     'var win=window;',
@@ -522,7 +524,7 @@ function createHtmlResponse(data) {
     'guard++;',
     '}',
     '})();',
-    '<\/script></body></html>'
+    '<' + '/script><' + '/body><' + '/html>'
   ].join('');
   return HtmlService
     .createHtmlOutput(html)
@@ -889,7 +891,7 @@ function cleanPage_(value) {
   var page = String(value == null ? '' : value).trim();
   if (!page) return '/contact.html';
   page = page.split('#')[0].split('?')[0];
-  if (/^https?:\/\//i.test(page)) return '';
+  if (new RegExp('^https?:\\/\\/', 'i').test(page)) return '';
   if (page.charAt(0) !== '/') page = '/' + page;
   if (page.length > 200 || page.indexOf('//') !== -1) return '';
   if (!/^\/[A-Za-z0-9._~/-]*$/.test(page)) return '';
@@ -976,7 +978,7 @@ function safeHeader_(value) {
 function escapeHtml_(value) {
   return String(value == null ? '' : value)
     .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
+    .replace(new RegExp('<', 'g'), '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 }
