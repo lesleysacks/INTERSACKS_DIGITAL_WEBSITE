@@ -57,11 +57,11 @@ Project settings > Script properties:
 
 | Name | Required | Purpose |
 | --- | --- | --- |
-| `SPREADSHEET_ID` | Yes | Existing spreadsheet id. If unset, the script falls back to the known production workbook |
+| `SPREADSHEET_ID` | Yes for production | Existing spreadsheet id. A production submission is rejected when this is missing. There is no silent fallback |
 | `SHEET_NAME` | No | Defaults to `Leads` |
 | `ERROR_SHEET_NAME` | No | Defaults to `Error Log` |
-| `OWNER_EMAIL` | Yes | Owner notification recipient. Never sent to the website |
-| `ENVIRONMENT` | Yes | `production` or `test`. `test` skips MailApp so test runs cannot email real customers |
+| `OWNER_EMAIL` | Yes for production | Owner notification recipient. A production submission is rejected when this is missing or not an email address. Never sent to the website |
+| `ENVIRONMENT` | Yes | Only the exact value `production` accepts website submissions. `test`, `development`, or a missing value returns `TEST_MODE` and does not write `Leads`, send email, or issue a reference. `runSafeSelfTest()` still runs in the editor |
 | `ALLOWED_ORIGINS` | No | Kept for compatibility. The reply is accepted by the website from the Google origin, not from this list |
 | `WHATSAPP_ENABLED` | No | Must stay `false`. The WhatsApp function is a stub for a later official API |
 | `BUSINESS_NAME` | No | Defaults to `InterSacks Digital` |
@@ -76,7 +76,7 @@ Do not overwrite a live `/exec` URL until this version has been pasted, properti
 
 1. Open the **existing** standalone Apps Script project for this workbook if one was already created. Do not create a second project, and do not paste this into an unrelated Client Operations project.
 2. If no project exists yet, create one named `InterSacks website enquiries`, set the timezone to `Africa/Johannesburg`, and paste `apps-script/EnquiryWebApp.gs`.
-3. Set the script properties above. `ENVIRONMENT=production` only when you are ready to send real customer email.
+3. Set `SPREADSHEET_ID` and `OWNER_EMAIL`. Leave `ENVIRONMENT` as `test` until you are ready for a real row and a real email. Only the exact value `production` accepts a website submission.
 4. Deploy **Web app**. Execute as **Me**. Who has access: **Anyone**. Copy the URL that ends in `/exec`.
 5. Redeploy as a **new version** after every script change. Saving the editor is not a deploy.
 6. Put that `/exec` URL in `contact.html` as `data-enquiry-endpoint="https://script.google.com/macros/s/.../exec"` only after a trial submission has been verified.
@@ -106,7 +106,7 @@ node scripts/check-seo.mjs
 
 `npm test` uses an in-memory spreadsheet and a fake MailApp. It does not open Google and does not send mail.
 
-In the Apps Script editor, `ENVIRONMENT=test` skips MailApp. `runSafeSelfTest()` validates samples without writing production rows. Do not point an experimental script at the production `Leads` tab unless that row should remain.
+In the Apps Script editor, `ENVIRONMENT=test` rejects website submissions before a row is written. `runSafeSelfTest()` validates samples without writing production rows or sending mail. Do not set `ENVIRONMENT=production` until `SPREADSHEET_ID` and `OWNER_EMAIL` are set and you are ready for a real row to remain.
 
 ## What is already confirmed
 
@@ -128,9 +128,9 @@ No Apps Script `/exec` URL exists in the repository or on the published contact 
 
 Do not send a production enquiry until you approve that the row may remain on `Leads`.
 
-1. Paste the script into the existing project, or create one project only if none exists. Set `ENVIRONMENT=test`.
-2. Run `runSafeSelfTest()` in the editor. It does not write a lead.
-3. Deploy a new web-app version: execute as **Me**, access **Anyone**. Authorise Sheets and Mail when Google asks.
+1. Paste the script into the existing project, or create one project only if none exists. Set `ENVIRONMENT=test`, plus `SPREADSHEET_ID` and `OWNER_EMAIL`.
+2. Run `runSafeSelfTest()` in the editor. It does not write a lead or send mail.
+3. Deploy a new web-app version: execute as **Me**, access **Anyone**. Authorise Sheets and Mail when Google asks. A website POST while `ENVIRONMENT` is `test` must return `TEST_MODE` and must not add a `Leads` row.
 4. Approve one clearly labelled trial, then set `ENVIRONMENT=production` and submit once from the deployed `/exec` URL with a name such as `TEST ENQUIRY — DELETE IF NOT NEEDED`.
 5. Confirm exactly one new `Leads` row, an `ISD-` reference, an owner email, and a customer email. Confirm the row status is `NEW` and the notes show `customer=sent; owner=sent`.
 6. Only then put that `/exec` URL in `data-enquiry-endpoint` and publish the website.

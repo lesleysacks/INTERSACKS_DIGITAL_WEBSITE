@@ -24,6 +24,11 @@
  * page that postMessages the result to the parent origin. fetch/no-cors is
  * not used. JSON responses remain available for tests and for text/plain
  * POST bodies.
+ *
+ * External submissions are accepted only when ENVIRONMENT is exactly
+ * "production" and the spreadsheet id and owner email are set. A missing
+ * environment, "test", or "development" returns TEST_MODE and does not
+ * open the spreadsheet or send mail. runSafeSelfTest() does not save a lead.
  */
 
 var KNOWN_SPREADSHEET_ID = '1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M';
@@ -122,6 +127,17 @@ function processEnquiry(data) {
       code: 'VALIDATION',
       message: validated.message,
       submissionKey: validated.submissionKey || ''
+    };
+  }
+
+  var gate = submissionGate_();
+  if (!gate.ok) {
+    noteOperational_(gate.code);
+    return {
+      ok: false,
+      code: gate.code,
+      message: gate.message,
+      submissionKey: validated.submissionKey
     };
   }
 
@@ -429,22 +445,49 @@ function sendWhatsAppNotification(data) {
 
 function getConfiguration() {
   var props = PropertiesService.getScriptProperties();
-  var environment = (readProp_(props, 'ENVIRONMENT') || 'production').toLowerCase();
+  var environment = readProp_(props, 'ENVIRONMENT').toLowerCase();
   var whatsapp = (readProp_(props, 'WHATSAPP_ENABLED') || 'false').toLowerCase();
   var origins = readProp_(props, 'ALLOWED_ORIGINS') || 'https://www.intersacks.co.za,https://intersacks.co.za';
   return {
-    spreadsheetId: readProp_(props, 'SPREADSHEET_ID') || KNOWN_SPREADSHEET_ID,
+    spreadsheetId: readProp_(props, 'SPREADSHEET_ID'),
     sheetName: readProp_(props, 'SHEET_NAME') || DEFAULT_SHEET_NAME,
     errorSheetName: readProp_(props, 'ERROR_SHEET_NAME') || DEFAULT_ERROR_SHEET,
-    ownerEmail: readProp_(props, 'OWNER_EMAIL') || 'lesleysacks1@gmail.com',
+    ownerEmail: readProp_(props, 'OWNER_EMAIL'),
     businessName: readProp_(props, 'BUSINESS_NAME') || 'InterSacks Digital',
     businessEmail: readProp_(props, 'BUSINESS_EMAIL') || 'lesleysacks1@gmail.com',
     businessPhone: readProp_(props, 'BUSINESS_PHONE') || '084 325 2262',
     environment: environment,
-    testMode: environment === 'test' || environment === 'development',
+    acceptsSubmissions: environment === 'production',
+    testMode: environment !== 'production',
     whatsappEnabled: whatsapp === 'true' || whatsapp === '1' || whatsapp === 'yes',
     allowedOrigins: origins.split(',').map(function (item) { return item.trim(); }).filter(Boolean)
   };
+}
+
+function submissionGate_() {
+  var config = getConfiguration();
+  if (!config.acceptsSubmissions) {
+    return {
+      ok: false,
+      code: 'TEST_MODE',
+      message: 'External submissions are disabled while the script is in test mode.'
+    };
+  }
+  if (config.spreadsheetId !== KNOWN_SPREADSHEET_ID) {
+    return {
+      ok: false,
+      code: 'CONFIG',
+      message: 'The enquiry spreadsheet is not configured.'
+    };
+  }
+  if (!isEmail_(config.ownerEmail)) {
+    return {
+      ok: false,
+      code: 'CONFIG',
+      message: 'The enquiry notification address is not configured.'
+    };
+  }
+  return { ok: true };
 }
 
 function createJsonResponse(data) {
@@ -666,7 +709,8 @@ function runSafeSelfTest() {
 
   var source = '';
   try { source = String(runSafeSelfTest); } catch (ignore) { source = ''; }
-  check('no onFormSubmit trigger in this function', source.indexOf('onFormSubmit') === -1, 'editor self-test only');
+  check('editor self-test does not save a lead', source.indexOf('save' + 'Enquiry') === -1, 'validation only');
+  check('editor self-test does not register a form trigger', source.indexOf('onForm' + 'Submit') === -1, 'editor self-test only');
   check('whatsapp disabled', sendWhatsAppNotification({}).status === 'disabled', 'future channel stub');
 
   return results;

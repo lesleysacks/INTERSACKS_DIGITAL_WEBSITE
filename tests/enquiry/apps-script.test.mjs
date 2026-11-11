@@ -137,7 +137,7 @@ function load(options = {}) {
     SPREADSHEET_ID: options.spreadsheetId === undefined ? SPREADSHEET_ID : options.spreadsheetId,
     SHEET_NAME: 'Leads',
     OWNER_EMAIL: 'owner@example.co.za',
-    ENVIRONMENT: options.environment || 'production',
+    ENVIRONMENT: Object.prototype.hasOwnProperty.call(options, 'environment') ? options.environment : 'production',
     WHATSAPP_ENABLED: options.whatsappEnabled || 'false',
     ALLOWED_ORIGINS: 'https://www.intersacks.co.za,https://intersacks.co.za',
     ...options.properties
@@ -474,13 +474,41 @@ test('formula and email-header injection are neutralised', () => {
   assert.equal(runtime.mail.sent[0].subject.includes('\n'), false);
 });
 
-test('test mode does not send MailApp messages', () => {
-  const runtime = load({ environment: 'test' });
-  const result = runtime.sandbox.processEnquiry(validEnquiry);
-  assert.equal(result.ok, true);
-  assert.equal(runtime.mail.sent.length, 0);
-  assert.equal(result.notifications.customer.status, 'skipped:test-mode');
-  assert.equal(leadRows(runtime.leads).length, 1);
+test('test mode never writes a lead or sends email', () => {
+  for (const environment of ['test', 'development', '']) {
+    const runtime = load({ environment });
+    const result = parseJson(runtime.sandbox.doPost(jsonPost(validEnquiry)));
+    assert.equal(result.ok, false, environment || '(missing)');
+    assert.equal(result.code, 'TEST_MODE');
+    assert.match(result.message, /External submissions are disabled/i);
+    assert.equal(result.reference, undefined);
+    assert.equal(leadRows(runtime.leads).length, 0);
+    assert.equal(runtime.mail.sent.length, 0);
+    assert.equal(runtime.opened, 0);
+    const checks = runtime.sandbox.runSafeSelfTest();
+    assert.equal(checks.every((item) => item.pass), true);
+    assert.equal(leadRows(runtime.leads).length, 0);
+    assert.equal(runtime.mail.sent.length, 0);
+    assert.equal(runtime.opened, 0);
+  }
+});
+
+test('production requires a spreadsheet id and owner email before saving', () => {
+  const missingSheet = load({ spreadsheetId: '' });
+  const noSheet = parseJson(missingSheet.sandbox.doPost(jsonPost(validEnquiry)));
+  assert.equal(noSheet.ok, false);
+  assert.equal(noSheet.code, 'CONFIG');
+  assert.equal(leadRows(missingSheet.leads).length, 0);
+  assert.equal(missingSheet.mail.sent.length, 0);
+  assert.equal(missingSheet.opened, 0);
+
+  const missingOwner = load({ properties: { OWNER_EMAIL: '' } });
+  const noOwner = parseJson(missingOwner.sandbox.doPost(jsonPost(validEnquiry)));
+  assert.equal(noOwner.ok, false);
+  assert.equal(noOwner.code, 'CONFIG');
+  assert.equal(leadRows(missingOwner.leads).length, 0);
+  assert.equal(missingOwner.mail.sent.length, 0);
+  assert.equal(missingOwner.opened, 0);
 });
 
 test('WhatsApp remains disabled and is not required to save', () => {

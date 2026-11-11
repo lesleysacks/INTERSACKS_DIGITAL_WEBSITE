@@ -141,6 +141,27 @@ test('empty Apps Script endpoint keeps the mailto fallback', () => {
   runtime.controller.onSubmit({ preventDefault() {} });
   assert.equal(runtime.mailtoCalls.length, 1);
   assert.equal(runtime.form.submitCount, 0);
+  assert.equal(runtime.form.status.classList.contains('is-success'), false);
+});
+
+test('TEST_MODE is shown as a failure and not as a saved enquiry', () => {
+  const runtime = loadController();
+  runtime.controller.onSubmit({ preventDefault() {} });
+  runtime.controller.onMessage({
+    origin: 'https://n-abc123-script.googleusercontent.com',
+    data: {
+      ok: true,
+      code: 'TEST_MODE',
+      channel: 'intersacks-enquiry',
+      reference: 'ISD-20261111-0001',
+      submissionKey: '22222222-2222-4222-8222-222222222222',
+      message: 'External submissions are disabled while the script is in test mode.'
+    }
+  });
+  assert.equal(runtime.form.resetCount, 0);
+  assert.equal(runtime.form.status.classList.contains('is-success'), false);
+  assert.match(runtime.form.status.textContent, /External submissions are disabled/i);
+  assert.equal(/ISD-\d{8}-\d+/.test(runtime.form.status.textContent), false);
 });
 
 test('placeholder deployment URL does not pretend the enquiry was saved', () => {

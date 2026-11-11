@@ -93,6 +93,12 @@
       if (data.submissionKey && data.submissionKey !== pending.key) return;
       finishPending();
 
+      if (data.code === 'TEST_MODE') {
+        var testMessage = typeof data.message === 'string' ? data.message.trim() : '';
+        setStatus(SAFE_MESSAGE.test(testMessage) ? testMessage : 'External submissions are disabled while the script is in test mode.', true, false);
+        return;
+      }
+
       if (data.ok === true && typeof data.reference === 'string' && /^ISD-\d{8}-\d+$/.test(data.reference.trim())) {
         var reference = data.reference.trim();
         if (data.customerEmail === 'failed') {
