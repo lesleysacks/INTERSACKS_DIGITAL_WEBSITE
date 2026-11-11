@@ -27,9 +27,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=lead-progress">
   <script src="js/analytics.js" defer></script>
-  <script src="js/enquiry-form.js" defer></script>
+  <script src="js/enquiry-form.js?v=lead-progress" defer></script>
   <script src="js/script.js" defer></script>
 </head>
 <body>
@@ -67,7 +67,11 @@
         <fieldset><legend>What can we help with?</legend><div class="service-choice"><label><input type="radio" name="service" value="Web Solutions" required><span>Web Solutions</span></label><label><input type="radio" name="service" value="Branding"><span>Branding</span></label><label><input type="radio" name="service" value="Business Automation"><span>Automation</span></label><label><input type="radio" name="service" value="AI & Software"><span>AI & Software</span></label></div></fieldset>
         <label>Tell us a little about the project<textarea name="message" rows="5" maxlength="4000" required></textarea></label>
         <div class="enquiry-hp" aria-hidden="true"><label>Company fax<input type="text" name="fax_number" tabindex="-1" autocomplete="off"></label></div>
-        <button class="button button-gold" type="submit"><span class="send-label">Send enquiry</span><span class="send-arrow" aria-hidden="true">↗</span><span class="send-progress" aria-hidden="true"><span></span></span></button>
+        <button class="button button-gold" type="submit"><span class="send-label">Send enquiry</span><span class="send-arrow" aria-hidden="true">↗</span></button>
+        <div class="lead-progress" id="lead-progress" hidden>
+          <p class="lead-progress-label">Saving your lead</p>
+          <div class="lead-progress-track" role="progressbar" aria-label="Saving your lead"><span></span></div>
+        </div>
         <p class="form-note" id="form-status" role="status" aria-live="polite" aria-atomic="true">This form sends an enquiry. It is not a confirmed booking.</p>
         <iframe name="enquiry-response" id="enquiry-response" title="Enquiry submission result" hidden aria-hidden="true"></iframe>
       </form>

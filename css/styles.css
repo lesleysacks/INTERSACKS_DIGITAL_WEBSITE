@@ -1389,30 +1389,28 @@ outline:3px solid var(--focus);
 outline-offset:2px}
 .contact-form>label{
 margin-bottom:28px}
-.contact-form button{
-position:relative;
-overflow:hidden}
-.contact-form .send-progress{
-display:none;
-position:absolute;
-left:0;
-right:0;
-bottom:0;
-height:4px;
-background:rgba(8,20,35,.18)}
-.contact-form button.is-loading .send-progress{
-display:block}
-.contact-form .send-progress span{
+.lead-progress{
+margin-top:16px}
+.lead-progress-label{
+margin:0 0 8px;
+font-size:10px;
+font-weight:800;
+letter-spacing:1.2px;
+text-transform:uppercase;
+color:var(--navy)}
+.lead-progress-track{
+height:10px;
+overflow:hidden;
+background:rgba(8,20,35,.14)}
+.lead-progress-track span{
 display:block;
-width:42%;
+width:38%;
 height:100%;
-background:var(--navy);
-font-size:0;
-line-height:0;
+background:var(--gold);
 animation:enquiry-progress 1.05s ease-in-out infinite}
 @keyframes enquiry-progress{
 0%{transform:translateX(-130%)}
-100%{transform:translateX(280%)}}
+100%{transform:translateX(320%)}}
 .form-note{
 font-size:10px;
 line-height:1.6;
