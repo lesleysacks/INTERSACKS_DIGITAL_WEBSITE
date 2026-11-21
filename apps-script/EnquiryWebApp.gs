@@ -29,6 +29,32 @@
  * "production" and the spreadsheet id and owner email are set. A missing
  * environment, "test", or "development" returns TEST_MODE and does not
  * open the spreadsheet or send mail. runSafeSelfTest() does not save a lead.
+ *
+ * Release 1 hardening (see docs/releases/RELEASE_1_ENQUIRY_HARDENING.md):
+ *
+ *   - Only the known website fields are read. Anything else is ignored.
+ *   - Text is normalised and stripped of control, bidi and zero-width
+ *     characters before it is validated, stored or emailed.
+ *   - Email addresses must match a strict single-address pattern, so a
+ *     comma, semicolon, quote, angle bracket or line break can never add a
+ *     second recipient.
+ *   - Hourly limits apply per email address, per phone number and to the
+ *     whole web app. Apps Script does not expose the visitor IP address, so
+ *     an IP-based limit is not possible here.
+ *   - An identical enquiry (same email, service and message) within 24 hours
+ *     returns the original reference instead of a new row and new emails.
+ *   - The owner is notified first. The customer acknowledgement has a fixed
+ *     template, is only sent to the address on a valid enquiry, and is
+ *     skipped when the hourly customer-email cap or the daily MailApp
+ *     reserve for owner notifications would be exceeded.
+ *   - "Consent to contact" is no longer written as an automatic "Yes". The
+ *     column records that the reply is at the visitor's request, plus the
+ *     visitor's own optional marketing choice. Evidence (privacy notice
+ *     version, timestamp, choice) is written to Internal notes.
+ *   - The form sends how long it was open (formElapsedMs). Very fast or
+ *     malformed values are rejected. This is a bot deterrent only: a
+ *     scripted client can send any value. Set REQUIRE_FORM_TIMING=true once
+ *     the Release 1 website is live to reject requests without the field.
  */
 
 var KNOWN_SPREADSHEET_ID = '1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M';
@@ -37,8 +63,20 @@ var DEFAULT_ERROR_SHEET = 'Error Log';
 var LEAD_SOURCE = 'Website \u2013 Contact form';
 var LOCK_WAIT_MS = 15000;
 var ERROR_LOG_LOCK_WAIT_MS = 5000;
-var RATE_LIMIT_PER_HOUR = 20;
+var RATE_LIMIT_PER_HOUR = 5;
+var PHONE_RATE_LIMIT_PER_HOUR = 5;
+var DEFAULT_GLOBAL_HOURLY_LIMIT = 30;
+var DEFAULT_CUSTOMER_EMAIL_HOURLY_LIMIT = 15;
+var DEFAULT_OWNER_MAIL_RESERVE = 20;
+var MAX_NOTIFICATION_RETRIES = 2;
+var DUPLICATE_WINDOW_MS = 24 * 60 * 60 * 1000;
+var MIN_FORM_ELAPSED_MS = 3000;
+var MAX_FORM_ELAPSED_MS = 24 * 60 * 60 * 1000;
+var MAX_REQUEST_CHARS = 20000;
 var CHANNEL = 'intersacks-enquiry';
+
+var CONSENT_REPLY_ONLY = 'Reply to enquiry only (visitor request)';
+var CONSENT_REPLY_AND_MARKETING = 'Reply to enquiry + marketing opt-in';
 
 var STATUS = {
   RECEIVED: 'RECEIVED',
@@ -185,8 +223,11 @@ function processEnquiry(data) {
     whatsapp: { ok: true, skipped: true, status: 'disabled' }
   };
 
-  if (!saved.duplicate || saved.needsNotificationRetry) {
+  if (!saved.duplicate) {
     notifications = dispatchNotifications_(saved);
+    updateNotificationStatus(saved, notifications);
+  } else if (saved.retry && (saved.retry.owner || saved.retry.customer) && claimRetry_(validated.submissionKey)) {
+    notifications = dispatchNotifications_(saved, saved.retry);
     updateNotificationStatus(saved, notifications);
   }
 
@@ -204,7 +245,7 @@ function processEnquiry(data) {
 function validateEnquiry(data) {
   data = data || {};
 
-  if (String(data.fax_number || '').trim()) {
+  if (cleanText_(data.fax_number, 200)) {
     return { ok: false, message: 'Check the enquiry and try again.', logDetail: 'A honeypot field was completed.' };
   }
 
@@ -212,15 +253,18 @@ function validateEnquiry(data) {
   if (!name) return { ok: false, message: 'Enter your full name.', logDetail: 'Name was missing.' };
   if (name.length < 2) return { ok: false, message: 'Enter your full name.', logDetail: 'Name was too short.' };
 
-  var email = cleanText_(data.email, 254);
-  if (!isEmail_(email)) return { ok: false, message: 'Enter a valid email address.', logDetail: 'Email was missing or invalid.' };
+  var rawEmail = String(data.email == null ? '' : data.email);
+  var email = cleanText_(rawEmail, 254);
+  if (email !== rawEmail.trim() || !isEmail_(email)) {
+    return { ok: false, message: 'Enter a valid email address.', logDetail: 'Email was missing or invalid.' };
+  }
 
-  var phoneResult = normalisePhone(data.phone);
+  var phoneResult = normalisePhone(cleanText_(data.phone, 40));
   if (phoneResult.missing) return { ok: false, message: 'Enter your phone number.', logDetail: 'Phone number was missing.' };
   if (!phoneResult.ok) return { ok: false, message: 'Enter a valid phone number.', logDetail: 'Phone number was invalid.' };
 
   var service = cleanText_(data.service, 80);
-  if (!SERVICE_VALUES[service]) {
+  if (!SERVICE_VALUES.hasOwnProperty(service) || SERVICE_VALUES[service] !== true) {
     return { ok: false, message: 'Choose the service you need.', logDetail: 'Service was missing or unknown.' };
   }
 
@@ -231,8 +275,10 @@ function validateEnquiry(data) {
   var page = cleanPage_(data.page);
   if (!page) return { ok: false, message: 'Check the enquiry and try again.', logDetail: 'Website page was invalid.' };
 
-  var bookingDate = cleanText_(data.bookingDate || data.booking_date || '', 40);
-  var bookingDetails = cleanText_(data.bookingDetails || data.booking_details || '', 500);
+  var timing = formTiming_(data);
+  if (!timing.ok) {
+    return { ok: false, message: 'Please take a moment to review your enquiry and try again.', logDetail: timing.detail };
+  }
 
   var submissionKey = cleanText_(data.submissionKey || data.submission_key || '', 80);
   if (!submissionKey) {
@@ -256,11 +302,45 @@ function validateEnquiry(data) {
     service: service,
     message: message,
     page: page,
-    bookingDate: bookingDate,
-    bookingDetails: bookingDetails,
+    marketingConsent: marketingChoice_(data.marketingConsent),
+    privacyNotice: noticeVersion_(data.privacyNotice),
+    formTiming: timing.status,
     submissionKey: submissionKey,
     submittedAt: new Date()
   };
+}
+
+/**
+ * The optional marketing box is unchecked by default. Only the exact value
+ * the checkbox sends ("yes") counts as an opt-in. Anything else is "no".
+ */
+function marketingChoice_(value) {
+  if (Object.prototype.toString.call(value) === '[object Array]') value = value[0];
+  return String(value == null ? '' : value).trim().toLowerCase() === 'yes';
+}
+
+function noticeVersion_(value) {
+  var version = cleanText_(value, 20);
+  return new RegExp('^\\d{4}-\\d{2}-\\d{2}$').test(version) ? version : '';
+}
+
+/**
+ * formElapsedMs is how long the form was open before submit. Absent means
+ * an older website build (allowed unless REQUIRE_FORM_TIMING is true).
+ * Present but empty, non-numeric, too fast or too slow is rejected.
+ */
+function formTiming_(data) {
+  var present = Object.prototype.hasOwnProperty.call(data, 'formElapsedMs');
+  if (!present) {
+    if (getConfiguration().requireFormTiming) return { ok: false, detail: 'Form timing was missing.' };
+    return { ok: true, status: 'absent' };
+  }
+  var raw = cleanText_(data.formElapsedMs, 12);
+  if (!new RegExp('^\\d{1,9}$').test(raw)) return { ok: false, detail: 'Form timing was malformed.' };
+  var elapsed = Number(raw);
+  if (elapsed < MIN_FORM_ELAPSED_MS) return { ok: false, detail: 'Form was submitted too quickly.' };
+  if (elapsed > MAX_FORM_ELAPSED_MS) return { ok: false, detail: 'Form timing was out of range.' };
+  return { ok: true, status: 'ok' };
 }
 
 function generateEnquiryReference(rows, now) {
@@ -326,16 +406,25 @@ function saveEnquiry(data) {
       spreadsheet: spreadsheet,
       leads: leads,
       record: data,
-      needsNotificationRetry: notificationNeedsRetry_(existing.notes)
+      retry: notificationRetryPlan_(existing.notes)
     };
   }
 
-  if (!withinRateLimit_(data.email)) {
-    logError('RATE_LIMIT', 'rate', '', 'The hourly enquiry limit was reached.', spreadsheet);
+  var repeated = findRecentRepeat_(rows, data);
+  if (repeated) {
+    noteOperational_('REPEATED_CONTENT');
+    data.repeatOf = repeated.reference;
+  }
+
+  var limit = checkRateLimits_(data);
+  if (!limit.ok) {
+    logError('RATE_LIMIT', 'rate', '', 'An hourly enquiry limit was reached (' + limit.scope + ').', spreadsheet);
     return {
       ok: false,
       code: 'RATE_LIMIT',
-      message: 'Please wait a few minutes and try again.',
+      message: limit.scope === 'global'
+        ? 'We are receiving a lot of enquiries. Please try again later, or call or WhatsApp 084 325 2262.'
+        : 'Please wait a few minutes and try again.',
       submissionKey: data.submissionKey
     };
   }
@@ -352,7 +441,7 @@ function saveEnquiry(data) {
     };
   }
 
-  var notes = bookingNotes_(data);
+  var notes = consentNotes_(data);
   textColumns_(leads, nextRow);
   leads.getRange(nextRow, 1, 1, width).setValues([[
     reference,
@@ -365,7 +454,7 @@ function saveEnquiry(data) {
     asText_(data.message),
     LEAD_SOURCE,
     data.page,
-    'Yes',
+    data.marketingConsent ? CONSENT_REPLY_AND_MARKETING : CONSENT_REPLY_ONLY,
     SHEET_STATUS.RECEIVED,
     LEAD_PRIORITY,
     '',
@@ -373,7 +462,7 @@ function saveEnquiry(data) {
     '',
     asText_(notes),
     data.submissionKey,
-    '',
+    data.repeatOf || '',
     asText_(data.phoneNormalised)
   ]]);
 
@@ -388,8 +477,7 @@ function saveEnquiry(data) {
     rowNumber: nextRow,
     spreadsheet: spreadsheet,
     leads: leads,
-    record: data,
-    needsNotificationRetry: true
+    record: data
   };
 }
 
@@ -399,6 +487,22 @@ function sendCustomerAcknowledgement(data) {
   if (!shouldDispatchNotifications_()) {
     result.skipped = true;
     result.status = 'skipped:test-mode';
+    return result;
+  }
+  // The only possible recipient is the validated address on the saved
+  // enquiry. Re-check it here so no other code path can widen it.
+  var record = data.record || data;
+  if (!isEmail_(email.to) || email.to !== record.email) {
+    noteOperational_('CUSTOMER_EMAIL_RECIPIENT_REJECTED');
+    result.ok = false;
+    result.status = 'failed';
+    return result;
+  }
+  var budget = customerEmailBudget_();
+  if (!budget.ok) {
+    noteOperational_('CUSTOMER_EMAIL_SKIPPED_' + budget.reason.toUpperCase());
+    result.skipped = true;
+    result.status = 'skipped:limit';
     return result;
   }
   try {
@@ -468,6 +572,10 @@ function getConfiguration() {
     acceptsSubmissions: environment === 'production',
     testMode: environment !== 'production',
     whatsappEnabled: whatsapp === 'true' || whatsapp === '1' || whatsapp === 'yes',
+    requireFormTiming: (readProp_(props, 'REQUIRE_FORM_TIMING') || 'false').toLowerCase() === 'true',
+    globalHourlyLimit: positiveInt_(readProp_(props, 'GLOBAL_HOURLY_LIMIT'), DEFAULT_GLOBAL_HOURLY_LIMIT),
+    customerEmailHourlyLimit: positiveInt_(readProp_(props, 'CUSTOMER_EMAIL_HOURLY_LIMIT'), DEFAULT_CUSTOMER_EMAIL_HOURLY_LIMIT),
+    ownerMailReserve: positiveInt_(readProp_(props, 'OWNER_MAIL_RESERVE'), DEFAULT_OWNER_MAIL_RESERVE),
     allowedOrigins: origins.split(',').map(function (item) { return item.trim(); }).filter(Boolean)
   };
 }
@@ -546,7 +654,7 @@ function buildCustomerEmail(data) {
   var to = safeHeader_(record.email);
   var subject = safeHeader_('We received your enquiry (' + reference + ')');
   var body = [
-    'Hello ' + record.name + ',',
+    greetingLine_(record.name),
     '',
     'Thank you for contacting ' + config.businessName + '.',
     '',
@@ -555,7 +663,6 @@ function buildCustomerEmail(data) {
     'This acknowledgement means we have your request on file. It is not a confirmed booking and it is not a confirmed project. We will review the details and contact you to confirm the next step.',
     '',
     'Service: ' + record.service,
-    record.bookingDate ? 'Requested date: ' + record.bookingDate : '',
     '',
     'If you need to reach us:',
     'Email: ' + config.businessEmail,
@@ -569,7 +676,7 @@ function buildCustomerEmail(data) {
   }).join('\n');
 
   var htmlBody = [
-    '<p>Hello ' + escapeHtml_(record.name) + ',</p>',
+    '<p>' + escapeHtml_(greetingLine_(record.name)) + '</p>',
     '<p>Thank you for contacting ' + escapeHtml_(config.businessName) + '.</p>',
     '<p>We have received your enquiry. Your reference is <strong>' + escapeHtml_(reference) + '</strong>.</p>',
     '<p>This acknowledgement means we have your request on file. It is <strong>not a confirmed booking</strong> and it is not a confirmed project. We will review the details and contact you to confirm the next step.</p>',
@@ -611,8 +718,8 @@ function buildOwnerEmail(data) {
     'Business: ' + (record.company || 'Not provided'),
     'Service: ' + record.service,
     'Page: ' + record.page,
-    record.bookingDate ? 'Requested date: ' + record.bookingDate : '',
-    record.bookingDetails ? 'Booking details: ' + record.bookingDetails : '',
+    'Marketing opt-in: ' + (record.marketingConsent ? 'Yes' : 'No'),
+    record.repeatOf ? 'Repeat of earlier enquiry: ' + record.repeatOf + ' (no customer acknowledgement sent)' : '',
     '',
     'Message:',
     record.message,
@@ -635,7 +742,9 @@ function buildOwnerEmail(data) {
     'Phone: ' + escapeHtml_(record.phone) + '<br>',
     'Business: ' + escapeHtml_(record.company || 'Not provided') + '<br>',
     'Service: ' + escapeHtml_(record.service) + '<br>',
-    'Page: ' + escapeHtml_(record.page) + '</p>',
+    'Page: ' + escapeHtml_(record.page) + '<br>',
+    'Marketing opt-in: ' + (record.marketingConsent ? 'Yes' : 'No') + '</p>',
+    record.repeatOf ? '<p>Repeat of earlier enquiry: ' + escapeHtml_(record.repeatOf) + ' (no customer acknowledgement sent)</p>' : '',
     '<p>Message:</p><pre>' + escapeHtml_(record.message) + '</pre>'
   ].join('');
 
@@ -724,12 +833,21 @@ function runSafeSelfTest() {
   check('editor self-test does not save a lead', source.indexOf('save' + 'Enquiry') === -1, 'validation only');
   check('editor self-test does not register a form trigger', source.indexOf('onForm' + 'Submit') === -1, 'editor self-test only');
   check('whatsapp disabled', sendWhatsAppNotification({}).status === 'disabled', 'future channel stub');
+  check('address list rejected', isEmail_('a@example.com,b@example.com') === false, 'single recipient only');
+  check('display name rejected', isEmail_('Name <a@example.com>') === false, 'single recipient only');
+  check('control characters removed', cleanText_('A\u0000B‮C', 20) === 'A B C', 'sanitised');
+  check('link in name not used as greeting', greetingLine_('Visit http://spam.example') === 'Hello,', 'fixed template');
+  check('marketing defaults to no', marketingChoice_('') === false && marketingChoice_('on') === false, 'unchecked by default');
 
   return results;
 }
 
 function parseRequest(e) {
   if (!e) return { error: true, format: 'json', reason: 'no-event' };
+
+  if (e.postData && typeof e.postData.contents === 'string' && e.postData.contents.length > MAX_REQUEST_CHARS) {
+    return { error: true, format: 'json', reason: 'too-large' };
+  }
 
   var fromParameters = parametersPayload_(e.parameter);
   if (fromParameters) return fromParameters;
@@ -754,29 +872,51 @@ function jsonPayload_(contents) {
   try {
     var parsed = JSON.parse(contents);
     if (!parsed || typeof parsed !== 'object' || Object.prototype.toString.call(parsed) === '[object Array]') return null;
-    return { payload: parsed, format: 'json' };
+    var picked = pickFields_(parsed);
+    if (!picked.found) return null;
+    return { payload: picked.payload, format: 'json' };
   } catch (err) {
     return null;
   }
 }
 
-function parametersPayload_(parameter) {
-  if (!parameter || typeof parameter !== 'object') return null;
+var ACCEPTED_FIELDS = [
+  'name', 'email', 'business', 'company', 'phone', 'service', 'message',
+  'page', 'submissionKey', 'submission_key', 'fax_number', 'formElapsedMs',
+  'marketingConsent', 'privacyNotice', 'responseFormat'
+];
+
+/**
+ * Copies only the known website fields. Unknown fields (for example
+ * "status", "to", "cc", "bcc" or "ownerEmail") are dropped and can never
+ * reach the sheet, an email header or a status value. Non-string values
+ * are reduced to their first string element or ignored.
+ */
+function pickFields_(source) {
   var payload = {};
-  var keys = [
-    'name', 'email', 'business', 'company', 'phone', 'service', 'message',
-    'page', 'submissionKey', 'submission_key', 'fax_number', 'bookingDate',
-    'booking_date', 'bookingDetails', 'booking_details', 'status', 'responseFormat'
-  ];
   var found = false;
-  for (var i = 0; i < keys.length; i++) {
-    if (parameter[keys[i]] == null) continue;
-    var value = parameter[keys[i]];
+  for (var i = 0; i < ACCEPTED_FIELDS.length; i++) {
+    var key = ACCEPTED_FIELDS[i];
+    if (!Object.prototype.hasOwnProperty.call(source, key) || source[key] == null) continue;
+    var value = source[key];
     if (Object.prototype.toString.call(value) === '[object Array]') value = value[0];
-    payload[keys[i]] = value;
+    if (value == null || typeof value === 'object' || typeof value === 'function') continue;
+    payload[key] = String(value);
     found = true;
   }
-  if (!found) return null;
+  return { payload: payload, found: found };
+}
+
+function parametersPayload_(parameter) {
+  if (!parameter || typeof parameter !== 'object') return null;
+  var picked = pickFields_(parameter);
+  if (!picked.found) return null;
+  var payload = picked.payload;
+  var size = 0;
+  for (var key in payload) {
+    if (Object.prototype.hasOwnProperty.call(payload, key)) size += payload[key].length;
+  }
+  if (size > MAX_REQUEST_CHARS) return { error: true, format: 'html', reason: 'too-large' };
   var format = String(payload.responseFormat || 'html').toLowerCase() === 'json' ? 'json' : 'html';
   return { payload: payload, format: format };
 }
@@ -829,10 +969,23 @@ function publicPayload_(data) {
   };
 }
 
-function dispatchNotifications_(saved) {
+/**
+ * The owner is notified before the customer, so a MailApp quota shortage
+ * or a burst of abusive enquiries cannot use up the owner's notification.
+ * With a retry plan, only the channels that failed earlier are re-sent.
+ */
+function dispatchNotifications_(saved, plan) {
+  var owner = plan && !plan.owner
+    ? { ok: true, skipped: true, status: plan.ownerStatus || 'unknown' }
+    : notifyBusinessOwner(saved);
+  var repeat = saved && saved.record && saved.record.repeatOf;
+  var customer;
+  if (plan && !plan.customer) customer = { ok: true, skipped: true, status: plan.customerStatus || 'unknown' };
+  else if (repeat) customer = { ok: true, skipped: true, status: 'skipped:repeat' };
+  else customer = sendCustomerAcknowledgement(saved);
   return {
-    customer: sendCustomerAcknowledgement(saved),
-    owner: notifyBusinessOwner(saved),
+    customer: customer,
+    owner: owner,
     whatsapp: sendWhatsAppNotification(saved)
   };
 }
@@ -843,7 +996,9 @@ function updateNotificationStatus(saved, notifications) {
   var owner = notifications && notifications.owner ? notifications.owner.status : 'unknown';
   var whatsapp = notifications && notifications.whatsapp ? notifications.whatsapp.status : 'disabled';
   var line = 'Notifications: customer=' + customer + '; owner=' + owner + '; whatsapp=' + whatsapp;
-  var extra = bookingNotes_(saved.record || {});
+  var extra = saved.duplicate && saved.retry
+    ? saved.retry.evidence
+    : consentNotes_(saved.record || {});
   var value = extra ? extra + ' | ' + line : line;
   try {
     saved.leads.getRange(saved.rowNumber, 17).setNumberFormat('@');
@@ -896,20 +1051,176 @@ function leadSheetUrl_(spreadsheetId, rowNumber) {
   return url;
 }
 
-function bookingNotes_(data) {
-  var parts = [];
-  if (data && data.bookingDate) parts.push('Requested date: ' + data.bookingDate);
-  if (data && data.bookingDetails) parts.push(data.bookingDetails);
-  return parts.join(' | ');
+/**
+ * Evidence written to Internal notes for each website enquiry: which
+ * privacy notice version the form showed, when it was submitted, the
+ * visitor's own marketing choice, and whether the form-timing check ran.
+ */
+function consentNotes_(data) {
+  if (!data || !data.submittedAt) return '';
+  var when = '';
+  try {
+    when = Utilities.formatDate(data.submittedAt, 'Africa/Johannesburg', "yyyy-MM-dd'T'HH:mm:ssXXX");
+  } catch (ignore) {
+    when = String(data.submittedAt);
+  }
+  return [
+    'Privacy notice ' + (data.privacyNotice || 'not stated') + ' shown on form',
+    'Submitted ' + when,
+    'Purpose: reply to this enquiry',
+    'Marketing opt-in: ' + (data.marketingConsent ? 'yes' : 'no'),
+    'Form timing: ' + (data.formTiming || 'absent')
+  ].concat(data.repeatOf ? ['Repeat of ' + data.repeatOf] : []).join('; ');
 }
 
-function notificationNeedsRetry_(notes) {
+/**
+ * Reads "Notifications: customer=...; owner=..." from Internal notes and
+ * decides which channels may be retried. A channel that was sent, skipped
+ * by a limit, or skipped in test mode is never re-sent.
+ */
+function notificationRetryPlan_(notes) {
   var text = String(notes || '');
-  if (!text) return true;
-  if (text.indexOf('customer=failed') !== -1 || text.indexOf('owner=failed') !== -1) return true;
-  if (text.indexOf('customer=sent') !== -1 && text.indexOf('owner=sent') !== -1) return false;
-  if (text.indexOf('skipped:test-mode') !== -1) return false;
-  return true;
+  var marker = text.lastIndexOf('Notifications:');
+  var evidence = marker > 0 ? text.slice(0, marker).replace(new RegExp('\\s*\\|\\s*$'), '') : (marker === 0 ? '' : text);
+  var customerMatch = new RegExp('customer=([A-Za-z:-]+)').exec(text);
+  var ownerMatch = new RegExp('owner=([A-Za-z:-]+)').exec(text);
+  var customerStatus = customerMatch ? customerMatch[1] : '';
+  var ownerStatus = ownerMatch ? ownerMatch[1] : '';
+  return {
+    customer: !customerStatus || customerStatus === 'failed',
+    owner: !ownerStatus || ownerStatus === 'failed',
+    customerStatus: customerStatus,
+    ownerStatus: ownerStatus,
+    evidence: evidence
+  };
+}
+
+/** At most MAX_NOTIFICATION_RETRIES re-sends per submission key per hour. */
+function claimRetry_(submissionKey) {
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = 'retry:' + submissionKey;
+    var count = Number(cache.get(key) || '0');
+    if (count >= MAX_NOTIFICATION_RETRIES) return false;
+    cache.put(key, String(count + 1), 3600);
+    return true;
+  } catch (cacheError) {
+    return false;
+  }
+}
+
+/**
+ * The same email, service and message within 24 hours is a repeat of an
+ * earlier enquiry. It is still saved (the owner sees it), but "Duplicate
+ * of" (column S) names the earlier reference, so the sheet's Counted
+ * formula excludes it, and no second customer acknowledgement is sent.
+ */
+function findRecentRepeat_(rows, data) {
+  var email = String(asText_(data.email)).toLowerCase();
+  var message = asText_(data.message);
+  var now = data.submittedAt ? data.submittedAt.getTime() : new Date().getTime();
+  for (var i = rows.length - 1; i >= 1; i--) {
+    var reference = String(rows[i][0] || '').trim();
+    if (!reference) continue;
+    if (String(rows[i][3] || '').toLowerCase() !== email) continue;
+    if (String(rows[i][6] || '') !== data.service) continue;
+    if (String(rows[i][7] || '') !== message) continue;
+    var received = rows[i][1];
+    var time = received instanceof Date ? received.getTime() : new Date(received).getTime();
+    if (isNaN(time) || now - time > DUPLICATE_WINDOW_MS || now - time < 0) continue;
+    var original = String(rows[i][18] || '').trim();
+    return { reference: original || reference, rowNumber: i + 1 };
+  }
+  return null;
+}
+
+/**
+ * Fixed-window hourly counters in CacheService. Per email and per phone
+ * stop one person (or one copied address) flooding the sheet. The global
+ * counter caps the whole web app, because an attacker can rotate email
+ * addresses and phone numbers and Apps Script does not expose the IP.
+ * If the cache is unavailable, the per-person limits fail open (a real
+ * customer is not blocked) but the global limit is not counted.
+ */
+function checkRateLimits_(data) {
+  var config = getConfiguration();
+  var cache;
+  try {
+    cache = CacheService.getScriptCache();
+  } catch (cacheError) {
+    noteOperational_('RATE_LIMIT_CACHE_UNAVAILABLE');
+    return { ok: true };
+  }
+  var bucket = hourBucket_(data.submittedAt);
+  var checks = [
+    { scope: 'global', key: 'rl:all:' + bucket, limit: config.globalHourlyLimit },
+    { scope: 'email', key: 'rl:em:' + bucket + ':' + rateHash_(String(data.email || '').toLowerCase()), limit: RATE_LIMIT_PER_HOUR },
+    { scope: 'phone', key: 'rl:ph:' + bucket + ':' + rateHash_(String(data.phoneNormalised || '')), limit: PHONE_RATE_LIMIT_PER_HOUR }
+  ];
+  try {
+    var counts = [];
+    for (var i = 0; i < checks.length; i++) {
+      var count = Number(cache.get(checks[i].key) || '0');
+      if (count >= checks[i].limit) return { ok: false, scope: checks[i].scope };
+      counts.push(count);
+    }
+    for (var j = 0; j < checks.length; j++) {
+      cache.put(checks[j].key, String(counts[j] + 1), 3700);
+    }
+  } catch (countError) {
+    noteOperational_('RATE_LIMIT_CACHE_UNAVAILABLE');
+  }
+  return { ok: true };
+}
+
+/**
+ * The customer acknowledgement is optional. It is skipped (the lead is
+ * still saved and the owner still notified) when the hourly customer-email
+ * cap is reached, or when MailApp's remaining daily quota is at or below
+ * the reserve kept for owner notifications.
+ */
+function customerEmailBudget_() {
+  var config = getConfiguration();
+  try {
+    if (typeof MailApp.getRemainingDailyQuota === 'function') {
+      var remaining = Number(MailApp.getRemainingDailyQuota());
+      if (!isNaN(remaining) && remaining <= config.ownerMailReserve) return { ok: false, reason: 'quota' };
+    }
+  } catch (quotaError) {
+    return { ok: false, reason: 'quota' };
+  }
+  try {
+    var cache = CacheService.getScriptCache();
+    var key = 'rl:ack:' + hourBucket_(new Date());
+    var count = Number(cache.get(key) || '0');
+    if (count >= config.customerEmailHourlyLimit) return { ok: false, reason: 'hourly' };
+    cache.put(key, String(count + 1), 3700);
+  } catch (cacheError) {
+    return { ok: false, reason: 'cache' };
+  }
+  return { ok: true };
+}
+
+function hourBucket_(when) {
+  var date = when instanceof Date ? when : new Date();
+  return String(Math.floor(date.getTime() / 3600000));
+}
+
+function positiveInt_(value, fallback) {
+  var number = Number(value);
+  if (!value || isNaN(number) || number < 1 || Math.floor(number) !== number) return fallback;
+  return number;
+}
+
+/**
+ * Greets the customer by name only when the name looks like a name. This
+ * keeps visitor-controlled text (links, adverts) out of the email the web
+ * app sends to the address on the enquiry.
+ */
+function greetingLine_(name) {
+  var text = String(name == null ? '' : name);
+  var plausible = new RegExp("^[\\p{L}\\p{M}][\\p{L}\\p{M} .'\u2019-]{0,59}$", 'u');
+  return plausible.test(text) ? 'Hello ' + text + ',' : 'Hello,';
 }
 
 function normalisePhone(raw) {
@@ -935,8 +1246,25 @@ function normalisePhone(raw) {
   return { ok: false };
 }
 
+var INVISIBLE_CHARACTERS = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u00AD\\u061C\\u180E\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\uFEFF\\uFFF9-\\uFFFB]', 'g');
+
+/**
+ * Normalises to NFC, removes control, bidi-override, zero-width and other
+ * invisible formatting characters, collapses whitespace and truncates.
+ * Arrays and objects are never treated as text.
+ */
 function cleanText_(value, maxLength) {
-  return String(value == null ? '' : value).replace(new RegExp('\\s+', 'g'), ' ').trim().slice(0, maxLength);
+  if (Object.prototype.toString.call(value) === '[object Array]') value = value[0];
+  if (value == null || typeof value === 'object' || typeof value === 'function') return '';
+  var text = String(value);
+  try {
+    text = text.normalize('NFC');
+  } catch (ignore) {}
+  return text
+    .replace(INVISIBLE_CHARACTERS, ' ')
+    .replace(new RegExp('\\s+', 'g'), ' ')
+    .trim()
+    .slice(0, maxLength);
 }
 
 function cleanPage_(value) {
@@ -950,14 +1278,27 @@ function cleanPage_(value) {
   return page;
 }
 
+/**
+ * One plain address only: an ASCII local part without quotes, commas,
+ * semicolons, angle brackets or spaces, and a dotted domain with an
+ * alphabetic top-level domain. Display names, address lists and quoted
+ * local parts are rejected, so the value cannot add a recipient.
+ */
+var EMAIL_PATTERN = new RegExp(
+  "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*" +
+  '@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\\.)+[A-Za-z]{2,63}$'
+);
+
 function isEmail_(value) {
-  if (!value || value.length > 254) return false;
-  return new RegExp('^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$').test(value) && value.indexOf('..') === -1;
+  if (typeof value !== 'string' || !value || value.length > 254) return false;
+  var at = value.lastIndexOf('@');
+  if (at < 1 || at > 64) return false;
+  return EMAIL_PATTERN.test(value);
 }
 
 function formulaPrefix_(value) {
   var lead = String(value == null ? '' : value).charAt(0);
-  return lead === '=' || lead === '+' || lead === '-' || lead === '@';
+  return lead === '=' || lead === '+' || lead === '-' || lead === '@' || lead === '\t' || lead === '\r';
 }
 
 function asText_(value) {
@@ -998,19 +1339,6 @@ function nextDataRow_(rows) {
     if (String(rows[i][0] || '').trim()) lastDataIndex = i;
   }
   return lastDataIndex + 2;
-}
-
-function withinRateLimit_(email) {
-  try {
-    var cache = CacheService.getScriptCache();
-    var key = 'lead-rate:' + rateHash_(String(email || '').toLowerCase());
-    var count = Number(cache.get(key) || '0');
-    if (count >= RATE_LIMIT_PER_HOUR) return false;
-    cache.put(key, String(count + 1), 3600);
-    return true;
-  } catch (cacheError) {
-    return true;
-  }
 }
 
 function rateHash_(text) {
