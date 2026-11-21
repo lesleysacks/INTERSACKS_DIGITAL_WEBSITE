@@ -57,7 +57,7 @@ const events = () => evaluate(`(() => (window.dataLayer || []).filter((item) => 
 const click = (selector) => evaluate(`(() => { const link = document.querySelector(${JSON.stringify(selector)}); if (!link) return false; link.click(); return true; })()`);
 
 await goto('index.html');
-const home = await evaluate(`(() => ({ scripts: document.querySelectorAll('script[src="js/analytics.js"]').length, id: ${JSON.stringify('G-Q85HJEHCZ7')} }))()`);
+const home = await evaluate(`(() => ({ scripts: document.querySelectorAll('script[src="js/analytics.js"]').length, id: ${JSON.stringify('G-XCN1MN0GHR')} }))()`);
 if (home.scripts !== 1) fail(`Homepage loads analytics ${home.scripts} times`);
 const homePrivacy = await evaluate(`!!document.querySelector('footer a[href="privacy.html"]')`);
 if (!homePrivacy) fail('Homepage footer is missing the privacy link');
@@ -135,8 +135,8 @@ for (const page of pages) {
 }
 await goto('privacy.html');
 const privacyText = await evaluate('document.body.innerText');
-if (!privacyText.includes('G-Q85HJEHCZ7') || !privacyText.includes('lesleysacks1@gmail.com')) fail('Privacy page is missing the measurement or contact details');
-if (/lawful basis|we comply|cookies are disabled/i.test(privacyText)) fail('Privacy page states a legal basis or says cookies are disabled');
+if (!privacyText.includes('G-XCN1MN0GHR') || !privacyText.includes('lesleysacks1@gmail.com')) fail('Privacy page is missing the measurement or contact details');
+if (/we comply|POPIA compliant|fully compliant|cookies are disabled/i.test(privacyText)) fail('Privacy page claims compliance or says cookies are disabled');
 await evaluate(`(() => { document.addEventListener('click', (event) => { const link = event.target.closest && event.target.closest('a[href="privacy.html"]'); if (link) event.preventDefault(); }, true); const link = document.querySelector('footer a[href="privacy.html"]'); link.click(); return true; })()`);
 const privacyClick = await events();
 if (privacyClick.some((event) => event.name === 'quote_request_click')) fail('The privacy link was tracked as a quote request');

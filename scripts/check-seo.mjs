@@ -120,8 +120,14 @@ if (read('contact.html').includes('1N2xHXT2t28CdSBkZFihbOxgk9H3kK2-8n0QK2kXrW4M'
 if (/OWNER_EMAIL|SPREADSHEET_ID|ENQUIRY_PROXY_TOKEN/.test(enquiryForm)) fail('script property names leaked into public javascript');
 
 const privacy = read('privacy.html');
+const measurementIds = [...new Set((read('js/analytics.js').match(/G-[A-Z0-9]{6,}/g) || []))];
+if (measurementIds.length !== 1) fail(`js/analytics.js should contain exactly one GA4 measurement ID, found ${JSON.stringify(measurementIds)}`);
+for (const file of ['privacy.html', 'docs/analytics.md']) {
+  const ids = [...new Set((read(file).match(/G-[A-Z0-9]{6,}/g) || []))];
+  if (ids.length !== 1 || ids[0] !== measurementIds[0]) fail(`${file} names GA4 ID ${JSON.stringify(ids)} but js/analytics.js uses ${measurementIds[0]}`);
+}
 for (const phrase of [
-  'G-Q85HJEHCZ7',
+  'G-XCN1MN0GHR',
   'Google Analytics 4',
   'whatsapp_click',
   'email_click',
@@ -135,7 +141,7 @@ for (const phrase of [
 ]) {
   if (!privacy.includes(phrase)) fail(`privacy.html is missing ${phrase}`);
 }
-if (/lawful basis|we comply|POPIA compliant|cookies are disabled|consent mode/i.test(privacy)) fail('privacy.html states a legal basis or a consent control');
+if (/we comply|POPIA compliant|fully compliant|cookies are disabled|consent mode/i.test(privacy)) fail('privacy.html claims compliance or a consent control the site does not have');
 for (const file of ['index.html', 'about.html', 'services.html', 'work.html', 'process.html', 'contact.html', 'resources.html', '404.html', 'payments.html', 'privacy.html']) {
   if (!read(file).includes('href="privacy.html"')) fail(`${file} is missing the privacy link`);
 }
