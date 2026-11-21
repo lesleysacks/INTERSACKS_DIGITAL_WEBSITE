@@ -1420,6 +1420,39 @@ margin:15px 0 0}
 color:#a43737}
 .form-note.is-success{
 color:#1f6b3a}
+.contact-form .consent-choice{
+display:flex;
+align-items:flex-start;
+gap:10px;
+margin:0 0 16px;
+font-size:12px;
+font-weight:500;
+letter-spacing:0;
+text-transform:none;
+line-height:1.6;
+color:var(--ink);
+cursor:pointer}
+.contact-form .consent-choice input{
+display:block;
+appearance:auto;
+flex:0 0 auto;
+width:18px;
+height:18px;
+margin:2px 0 0;
+padding:0;
+border:0;
+accent-color:var(--navy)}
+.contact-form .consent-choice input:focus-visible{
+outline:3px solid var(--focus);
+outline-offset:2px}
+.privacy-summary{
+font-size:12px;
+line-height:1.6;
+color:var(--muted);
+margin:0 0 20px}
+.privacy-summary a{
+color:var(--navy);
+text-decoration:underline}
 .enquiry-hp{
 position:absolute;
 width:1px;

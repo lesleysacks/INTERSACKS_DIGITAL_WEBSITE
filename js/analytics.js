@@ -28,10 +28,22 @@
     loader.src = 'https://www.googletagmanager.com/gtag/js?id=' + MEASUREMENT_ID;
     document.head.appendChild(loader);
     window.gtag('js', new Date());
-    window.gtag('config', MEASUREMENT_ID);
+    // Google signals and ad personalisation are not used by this site.
+    window.gtag('config', MEASUREMENT_ID, {
+      allow_google_signals: false,
+      allow_ad_personalization_signals: false
+    });
   }
 
+  // Form values that js/enquiry-form.js reports, mapped to report names.
+  var LEAD_SERVICES = {
+    'Web Solutions': 'Web Solutions',
+    Branding: 'Branding',
+    'Business Automation': 'Business Automation',
+    'AI & Software': 'AI and Software'
+  };
   var seenServices = Object.create(null);
+  var seenLeads = Object.create(null);
 
   function pagePath() {
     return window.location.pathname || '/';
@@ -127,6 +139,19 @@
       track('contact_page_view', { link_location: 'contact' });
     }
   }
+
+  // Sent only after Apps Script has confirmed the enquiry was saved. The
+  // reference is used here to count each lead once and is not sent.
+  // No name, email, phone, business or message is available to this code.
+  window.addEventListener('intersacks:lead-confirmed', function (event) {
+    var detail = event && event.detail ? event.detail : {};
+    var reference = typeof detail.reference === 'string' ? detail.reference : '';
+    if (!/^ISD-\d{8}-\d+$/.test(reference) || seenLeads[reference]) return;
+    seenLeads[reference] = true;
+    var params = { link_location: 'contact' };
+    if (Object.prototype.hasOwnProperty.call(LEAD_SERVICES, detail.service)) params.service_name = LEAD_SERVICES[detail.service];
+    track('generate_lead', params);
+  });
 
   function start() {
     observeServices();

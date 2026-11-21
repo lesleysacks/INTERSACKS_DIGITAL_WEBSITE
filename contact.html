@@ -27,9 +27,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=lead-progress">
+  <link rel="stylesheet" href="css/styles.css?v=release-1">
   <script src="js/analytics.js" defer></script>
-  <script src="js/enquiry-form.js?v=lead-progress" defer></script>
+  <script src="js/enquiry-form.js?v=release-1" defer></script>
   <script src="js/script.js" defer></script>
 </head>
 <body>
@@ -61,12 +61,16 @@
         </div>
         <a class="text-link dark-link contact-whatsapp" href="https://wa.me/27843252262?text=Hello%20InterSacks%20Digital%2C%20I%20would%20like%20to%20start%20a%20project." target="_blank" rel="noopener noreferrer">Chat on WhatsApp <span>↗</span></a>
       </div>
-      <form class="contact-form reveal" id="contact-form" method="post" target="enquiry-response" action="https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec" data-enquiry-endpoint="https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec" aria-describedby="form-status">
+      <form class="contact-form reveal" id="contact-form" method="post" target="enquiry-response" action="https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec" data-enquiry-endpoint="https://script.google.com/macros/s/AKfycbyXeYkJxc01UIhhmKTdlKQu3NQ2T5UT3Yl-jgfrwn0wqyMTDAQFMoAWANYwLDnMKheshw/exec" aria-describedby="privacy-summary form-status">
         <div class="form-row"><label>Full name<input type="text" name="name" autocomplete="name" maxlength="120" required></label><label>Email address<input type="email" name="email" autocomplete="email" maxlength="254" required></label></div>
         <div class="form-row"><label>Business name<input type="text" name="business" autocomplete="organization" maxlength="160"></label><label>Phone number<input type="tel" name="phone" autocomplete="tel" inputmode="tel" maxlength="40" required></label></div>
         <fieldset><legend>What can we help with?</legend><div class="service-choice"><label><input type="radio" name="service" value="Web Solutions" required><span>Web Solutions</span></label><label><input type="radio" name="service" value="Branding"><span>Branding</span></label><label><input type="radio" name="service" value="Business Automation"><span>Automation</span></label><label><input type="radio" name="service" value="AI & Software"><span>AI & Software</span></label></div></fieldset>
         <label>Tell us a little about the project<textarea name="message" rows="5" maxlength="4000" required></textarea></label>
         <div class="enquiry-hp" aria-hidden="true"><label>Company fax<input type="text" name="fax_number" tabindex="-1" autocomplete="off"></label></div>
+        <input type="hidden" name="privacyNotice" value="2026-11-21">
+        <input type="hidden" name="formElapsedMs" value="">
+        <label class="consent-choice"><input type="checkbox" name="marketingConsent" value="yes"><span>Optional: send me occasional news and offers from InterSacks Digital. You do not need to tick this to send an enquiry, and you can withdraw at any time.</span></label>
+        <p class="privacy-summary" id="privacy-summary">We use these details to reply to your enquiry. They are stored in Google Sheets and sent through Google email services. See the <a href="privacy.html#enquiries">privacy notice</a> for what we keep, for how long, and your rights.</p>
         <button class="button button-gold" type="submit"><span class="send-label">Send enquiry</span><span class="send-arrow" aria-hidden="true">↗</span></button>
         <div class="lead-progress" id="lead-progress" hidden>
           <p class="lead-progress-label">Saving your lead</p>

@@ -8,6 +8,15 @@
  * The spreadsheet ID, owner mailbox, and other script properties never appear
  * here. If the endpoint is not configured, the existing mailto hand-off is
  * used so the live site keeps working until the web app is deployed.
+ *
+ * formElapsedMs tells Apps Script how long the form was open. It is a bot
+ * deterrent only; the server makes the decision. The optional marketing
+ * box is unchecked by default and is not needed to send an enquiry.
+ *
+ * After Apps Script confirms a saved enquiry, an "intersacks:lead-confirmed"
+ * event is dispatched once per reference. It carries only the reference and
+ * the chosen service. js/analytics.js turns it into a GA4 generate_lead event
+ * without the reference or any contact detail.
  */
 (function (root) {
   var FAILURE_MESSAGE = 'We could not send your enquiry. Please try again, or email lesleysacks1@gmail.com or call 084 325 2262.';
@@ -15,6 +24,7 @@
   var SAFE_MESSAGE = /^[A-Za-z0-9 ,.'’\-()]{8,200}$/;
   var CHANNEL = 'intersacks-enquiry';
   var RESPONSE_TIMEOUT_MS = 20000;
+  var LEAD_EVENT = 'intersacks:lead-confirmed';
 
   function createEnquiryController(options) {
     var form = options.form;
@@ -27,9 +37,12 @@
     };
     var now = options.now || function () { return Date.now(); };
     var createKey = options.createKey || defaultKey;
+    var onLeadConfirmed = options.onLeadConfirmed || dispatchLeadEvent;
     var submissionKey = '';
     var busy = false;
     var pending = null;
+    var startedAt = now();
+    var announced = {};
 
     ensureHiddenFields(form);
     addWindowListener('message', onMessage);
@@ -68,6 +81,7 @@
       writeHidden(form, 'submissionKey', key);
       writeHidden(form, 'page', currentPage());
       writeHidden(form, 'responseFormat', 'html');
+      writeHidden(form, 'formElapsedMs', String(Math.max(0, Math.round(now() - startedAt))));
 
       form.setAttribute('method', 'post');
       form.setAttribute('action', configuredEndpoint());
@@ -78,6 +92,7 @@
 
       pending = {
         key: key,
+        service: values.service,
         startedAt: now(),
         timer: root.setTimeout ? root.setTimeout(onTimeout, RESPONSE_TIMEOUT_MS) : null
       };
@@ -91,6 +106,7 @@
       var data = event && event.data;
       if (!data || data.channel !== CHANNEL) return;
       if (data.submissionKey && data.submissionKey !== pending.key) return;
+      var service = pending.service;
       finishPending();
 
       if (data.code === 'TEST_MODE') {
@@ -101,6 +117,7 @@
 
       if (data.ok === true && typeof data.reference === 'string' && /^ISD-\d{8}-\d+$/.test(data.reference.trim())) {
         var reference = data.reference.trim();
+        announceLead(reference, data.duplicate === true, service);
         if (data.customerEmail === 'failed') {
           setStatus('Your enquiry was saved. Your reference is ' + reference + '. We could not send the email acknowledgement. Submit again to retry the email. This is not a confirmed booking.', true, false);
           return;
@@ -123,6 +140,14 @@
       if (!pending) return;
       finishPending();
       setStatus(FAILURE_MESSAGE, true, false);
+    }
+
+    function announceLead(reference, duplicate, service) {
+      if (duplicate || announced[reference]) return;
+      announced[reference] = true;
+      try {
+        onLeadConfirmed({ reference: reference, service: service || '' });
+      } catch (error) {}
     }
 
     function finishPending() {
@@ -189,8 +214,13 @@
     };
   }
 
+  function dispatchLeadEvent(detail) {
+    if (!root.dispatchEvent || typeof root.CustomEvent !== 'function') return;
+    root.dispatchEvent(new root.CustomEvent(LEAD_EVENT, { detail: detail }));
+  }
+
   function ensureHiddenFields(form) {
-    ['submissionKey', 'page', 'responseFormat'].forEach(function (name) {
+    ['submissionKey', 'page', 'responseFormat', 'formElapsedMs'].forEach(function (name) {
       if (form.querySelector('[name="' + name + '"]')) return;
       var input = root.document && root.document.createElement ? root.document.createElement('input') : null;
       if (!input) return;
@@ -233,7 +263,7 @@
 
   function clientProblem(values) {
     if (!values.name) return 'Enter your full name.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(values.email) || values.email.length > 254) {
+    if (!isPlainEmail(values.email)) {
       return 'Enter a valid email address.';
     }
     if (!values.phone) return 'Enter your phone number.';
@@ -242,6 +272,14 @@
     if (!values.message) return 'Describe your project.';
     if (values.fax_number) return 'Check the enquiry and try again.';
     return '';
+  }
+
+  // Mirrors the Apps Script rule: one plain address, no display name or list.
+  function isPlainEmail(value) {
+    if (!value || value.length > 254) return false;
+    var at = value.lastIndexOf('@');
+    if (at < 1 || at > 64) return false;
+    return /^[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+\/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/.test(value);
   }
 
   function normalisePhone(raw) {
