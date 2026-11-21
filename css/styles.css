@@ -1752,4 +1752,5 @@ color:var(--ink)}
 margin:8px 0 0;
 padding-left:1.2em}
 .privacy-copy a{
-color:var(--gold-dark)}
+color:var(--gold-dark);
+text-decoration:underline}

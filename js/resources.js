@@ -9,6 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeFilter = 'all';
   let toastTimer;
 
+  // The search box filters in place. Pressing Enter must not reload the page.
+  // This replaces an inline onsubmit handler, which the CSP does not allow.
+  const finder = document.querySelector('.resource-finder');
+  if (finder) finder.addEventListener('submit', (event) => event.preventDefault());
+
   const normalise = (value) => value.toLowerCase().trim();
 
   const applyFilters = () => {
