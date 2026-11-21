@@ -34,8 +34,7 @@ project/
 ├── images/
 │      profile_pic.jpg # Lesley's profile picture
 ├── icons/             # (Optional) SVG/PNG icons
-├── assets/
-│      L.S CV 2026.pdf # Resumes and other static downloads
+├── assets/            # Images, browser tools, templates and resources
 └── README.md          # Technical documentation
 ```
 

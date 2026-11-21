@@ -12,6 +12,10 @@ The published GitHub Pages page still uses mailto until this change is merged. T
 
 An anonymous request to that URL on 11 November 2026 was redirected to a Google sign-in page. The web app is not available to visitors until the deployment is set to execute as **Me** and access **Anyone**, and a new version is deployed. Until then the contact page will wait and then show a failure. It will not show a success message.
 
+## Release 1 changes
+
+See `docs/releases/RELEASE_1_ENQUIRY_HARDENING.md` for the full list, the reasons and the deployment order. In short: allowlisted fields, text sanitisation, strict single-address email validation, hourly limits per email, per phone and for the whole web app, owner notification before the customer acknowledgement, a mail-quota reserve, a form-timing bot check, repeat detection, and consent evidence instead of an automatic `Yes`.
+
 ## Architecture
 
 ```
@@ -53,8 +57,8 @@ Other conventions kept from the existing sheet:
 
 - Lead source: `Website – Contact form` (en dash, Lists value)
 - Priority: `Medium`
-- Consent to contact: `Yes` (the visitor submitted the enquiry form)
-- Duplicate protection: submission key only. A second enquiry from the same email is a new row
+- Consent to contact: since Release 1 this is no longer an automatic `Yes`. It is `Reply to enquiry only (visitor request)`, or `Reply to enquiry + marketing opt-in` when the visitor ticked the optional marketing box. Internal notes record the privacy-notice version, the submission time, the purpose and the marketing choice
+- Duplicate protection: the submission key returns the original reference with no new row or email. The same email, service and message within 24 hours is saved as a new row with `Duplicate of` (column S) set to the first reference, so `Counted` excludes it, and no second customer acknowledgement is sent
 - Notification status is written to Internal notes after email attempts, for example `Notifications: customer=sent; owner=sent; whatsapp=disabled`
 
 ## Script properties
@@ -73,6 +77,10 @@ Project settings > Script properties:
 | `BUSINESS_NAME` | No | Defaults to `InterSacks Digital` |
 | `BUSINESS_EMAIL` | No | Customer-facing reply address. Defaults to the public studio email |
 | `BUSINESS_PHONE` | No | Defaults to `084 325 2262` |
+| `GLOBAL_HOURLY_LIMIT` | No | Release 1. Saved enquiries per hour for the whole web app. Default `30` |
+| `CUSTOMER_EMAIL_HOURLY_LIMIT` | No | Release 1. Customer acknowledgements per hour. Above it the lead is saved and the owner notified, but no acknowledgement is sent. Default `15` |
+| `OWNER_MAIL_RESERVE` | No | Release 1. If MailApp's remaining daily quota is at or below this, customer acknowledgements are skipped so owner notifications can still be sent. Default `20` |
+| `REQUIRE_FORM_TIMING` | No | Release 1. Set to `true` only after the Release 1 website is live. Then a request without `formElapsedMs` is rejected. Default `false`, so the current website keeps working |
 
 Do not put these values in website JavaScript.
 
