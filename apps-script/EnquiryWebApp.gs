@@ -916,8 +916,8 @@ function parametersPayload_(parameter) {
   for (var key in payload) {
     if (Object.prototype.hasOwnProperty.call(payload, key)) size += payload[key].length;
   }
-  if (size > MAX_REQUEST_CHARS) return { error: true, format: 'html', reason: 'too-large' };
   var format = String(payload.responseFormat || 'html').toLowerCase() === 'json' ? 'json' : 'html';
+  if (size > MAX_REQUEST_CHARS) return { error: true, format: format, reason: 'too-large' };
   return { payload: payload, format: format };
 }
 
